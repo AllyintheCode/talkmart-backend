@@ -1,0 +1,36 @@
+# node modules
+node_modules/
+
+# environment variables
+.env
+.env.local
+.env.production
+
+# build files
+.next/
+dist/
+build/
+
+# logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# coverage
+coverage/
+
+# cache
+.cache/
+
+# temporary
+*.tmp
