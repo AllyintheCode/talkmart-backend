@@ -1,129 +1,215 @@
-import User from "../models/User.js";
 import { z } from "zod";
+import crypto from "crypto";
+import User from "../models/User.js";
+import Otp from "../models/Otp.js";
+import { sendEmailOtp } from "../utils/email.js";
 import { signAccessToken } from "../utils/jwt.js";
-import { sendSms } from "../services/sms/index.js";
-import { normalizeAzPhone } from "../utils/phone.js";
 
-// ✅ phone formatını özünə görə dəqiqləşdirə bilərik
-const sendOtpSchema = z.object({
-  phone: z.string().min(7, "Phone minimum 7 simvol olmalıdır"),
-});
+const normalizeEmail = (e) =>
+  String(e || "")
+    .trim()
+    .toLowerCase();
+const normalizePhone = (p) => String(p || "").trim(); // istəsən AZ normalize edərik
 
-const verifyOtpSchema = z.object({
+const gen6 = () => String(Math.floor(100000 + Math.random() * 900000));
+const sha256 = (s) =>
+  crypto.createHash("sha256").update(String(s)).digest("hex");
+
+/* ---------------- REGISTER ---------------- */
+
+const userRegisterSchema = z.object({
+  fullName: z.string().min(2),
   phone: z.string().min(7),
-  code: z.string().length(4, "Kod 4 rəqəm olmalıdır"),
-
-  // ilk dəfə verify edəndə profil məlumatları gələ bilər
-  role: z.enum(["user", "provider"]).optional(),
-
-  // user/provider ortaq
-  fullName: z.string().min(2).optional(),
-
-  // provider üçün
-  companyName: z.string().min(2).optional(),
-  primaryServices: z.array(z.string()).optional(),
-  location: z.string().min(2).optional(),
-  about: z.string().min(10).optional(),
+  email: z.string().email(),
 });
 
-// OTP generator (4 rəqəm)
-function generateOtp() {
-  return Math.floor(1000 + Math.random() * 9000).toString();
-}
-
-export async function sendOtp(req, res) {
-  const parsed = sendOtpSchema.safeParse(req.body);
-
-  if (!parsed.success) {
-    return res.status(400).json({ error: "Validation error" });
-  }
-
-  const rawPhone = parsed.data.phone;
-  const phone = normalizeAzPhone(rawPhone);
-
-  const code = generateOtp();
-  const expire = new Date(Date.now() + 5 * 60 * 1000);
-
-  await User.findOneAndUpdate(
-    { phone },
-    { otpCode: code, otpExpire: expire },
-    { upsert: true, returnDocument: "after" },
-  );
-
-  await sendSms({
-    to: phone,
-    text: `Talkmart OTP kodunuz: ${code}`,
-  });
-
-  return res.json({ message: "OTP göndərildi" });
-}
-
-export async function verifyOtp(req, res) {
-  const parsed = verifyOtpSchema.safeParse(req.body);
-  if (!parsed.success) {
+export async function registerUser(req, res) {
+  const parsed = userRegisterSchema.safeParse(req.body);
+  if (!parsed.success)
     return res
       .status(400)
       .json({ error: "Validation error", details: parsed.error.issues });
-  }
 
-  const {
-    phone,
-    code,
-    role,
+  const fullName = parsed.data.fullName.trim();
+  const email = normalizeEmail(parsed.data.email);
+  const phone = normalizePhone(parsed.data.phone);
+
+  // email və phone unikaldır
+  const exists = await User.findOne({ $or: [{ email }, { phone }] });
+  if (exists)
+    return res
+      .status(409)
+      .json({ error: "Bu email və ya phone artıq qeydiyyatdadır" });
+
+  const user = await User.create({
+    role: "user",
     fullName,
-    companyName,
-    primaryServices,
-    location,
-    about,
-  } = parsed.data;
+    email,
+    phone,
+    providerProfile: null,
+  });
 
-  const user = await User.findOne({ phone });
+  return res.status(201).json({
+    message: "User qeydiyyatı tamamlandı",
+    user: {
+      id: user._id,
+      role: user.role,
+      fullName: user.fullName,
+      email: user.email,
+      phone: user.phone,
+    },
+  });
+}
+
+const providerRegisterSchema = z.object({
+  fullName: z.string().min(2),
+  companyName: z.string().min(2),
+  phone: z.string().min(7),
+  email: z.string().email(),
+  primaryServices: z.array(z.string().min(1)).min(1),
+  location: z.string().min(2),
+  about: z.string().min(10),
+});
+
+export async function registerProvider(req, res) {
+  const parsed = providerRegisterSchema.safeParse(req.body);
+  if (!parsed.success)
+    return res
+      .status(400)
+      .json({ error: "Validation error", details: parsed.error.issues });
+
+  const email = normalizeEmail(parsed.data.email);
+  const phone = normalizePhone(parsed.data.phone);
+
+  const exists = await User.findOne({ $or: [{ email }, { phone }] });
+  if (exists)
+    return res
+      .status(409)
+      .json({ error: "Bu email və ya phone artıq qeydiyyatdadır" });
+
+  const user = await User.create({
+    role: "provider",
+    fullName: parsed.data.fullName.trim(),
+    email,
+    phone,
+    providerProfile: {
+      companyName: parsed.data.companyName.trim(),
+      primaryServices: parsed.data.primaryServices.map((s) => s.trim()),
+      location: parsed.data.location.trim(),
+      about: parsed.data.about.trim(),
+      verified: false,
+    },
+  });
+
+  return res.status(201).json({
+    message: "Provider qeydiyyatı tamamlandı",
+    user: {
+      id: user._id,
+      role: user.role,
+      fullName: user.fullName,
+      email: user.email,
+      phone: user.phone,
+      providerProfile: user.providerProfile,
+    },
+  });
+}
+
+/* ---------------- LOGIN OTP ---------------- */
+
+const sendLoginOtpSchema = z.object({
+  email: z.string().email(),
+});
+
+export async function sendLoginOtp(req, res) {
+  const parsed = sendLoginOtpSchema.safeParse(req.body);
+  if (!parsed.success)
+    return res.status(400).json({ error: "Validation error" });
+
+  const email = normalizeEmail(parsed.data.email);
+
+  // Login üçün mütləq user DB-də olmalıdır (register-dən sonra)
+  const user = await User.findOne({ email });
   if (!user)
-    return res.status(400).json({ error: "OTP tapılmadı, əvvəl send-otp et" });
-
-  // OTP check
-  if (!user.otpCode || !user.otpExpire) {
     return res
-      .status(400)
-      .json({ error: "OTP mövcud deyil, yenidən send-otp et" });
+      .status(404)
+      .json({ error: "Bu email ilə hesab tapılmadı (əvvəl register et)" });
+
+  const purpose = "login";
+
+  // 60s cooldown
+  const existing = await Otp.findOne({ email, purpose });
+  if (existing?.lastSentAt) {
+    const diffSec =
+      (Date.now() - new Date(existing.lastSentAt).getTime()) / 1000;
+    if (diffSec < 60)
+      return res
+        .status(429)
+        .json({ error: "OTP çox tez istənildi. 60 saniyə gözlə." });
   }
 
-  if (user.otpExpire < new Date()) {
+  const code = gen6();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+
+  await Otp.findOneAndUpdate(
+    { email, purpose },
+    {
+      otpHash: sha256(code),
+      expiresAt,
+      attemptsLeft: 5,
+      lastSentAt: new Date(),
+    },
+    { upsert: true, new: true },
+  );
+
+  await sendEmailOtp(email, code);
+
+  return res.json({ message: "OTP email-ə göndərildi" });
+}
+
+const verifyLoginOtpSchema = z.object({
+  email: z.string().email(),
+  code: z.string().length(6),
+});
+
+export async function verifyLoginOtp(req, res) {
+  const parsed = verifyLoginOtpSchema.safeParse(req.body);
+  if (!parsed.success)
     return res
       .status(400)
-      .json({ error: "OTP vaxtı bitib, yenidən send-otp et" });
+      .json({ error: "Validation error", details: parsed.error.issues });
+
+  const email = normalizeEmail(parsed.data.email);
+  const code = String(parsed.data.code).trim();
+  const purpose = "login";
+
+  const record = await Otp.findOne({ email, purpose });
+  if (!record)
+    return res.status(400).json({ error: "OTP tapılmadı (yenidən send et)" });
+
+  if (record.expiresAt.getTime() < Date.now()) {
+    await Otp.deleteOne({ _id: record._id });
+    return res.status(400).json({ error: "OTP vaxtı bitib" });
   }
 
-  if (user.otpCode !== code) {
+  if (record.attemptsLeft <= 0) {
+    await Otp.deleteOne({ _id: record._id });
+    return res.status(429).json({ error: "Çox cəhd edildi. Yenidən OTP al." });
+  }
+
+  const ok = sha256(code) === record.otpHash;
+  if (!ok) {
+    record.attemptsLeft -= 1;
+    await record.save();
     return res.status(400).json({ error: "OTP yanlışdır" });
   }
 
-  // Profil update (ilk dəfə gələndə yazırıq, istəyirsən həmişə update edək)
-  if (fullName && !user.fullName) user.fullName = fullName;
+  await Otp.deleteOne({ _id: record._id });
 
-  // role dəyişməsi: təhlükəsiz üçün yalnız boşdursa yazırıq
-  if (role && user.role === "user") user.role = role;
-
-  if (user.role === "provider") {
-    user.providerProfile = user.providerProfile || {};
-
-    // provider məlumatlarını yazırıq (gələn varsa)
-    if (companyName) user.providerProfile.companyName = companyName;
-    if (primaryServices) user.providerProfile.primaryServices = primaryServices;
-    if (location) user.providerProfile.location = location;
-    if (about) user.providerProfile.about = about;
-
-    // verified default false qalır
-    if (typeof user.providerProfile.verified !== "boolean") {
-      user.providerProfile.verified = false;
-    }
-  }
-
-  // OTP sil
-  user.otpCode = null;
-  user.otpExpire = null;
-
-  await user.save();
+  const user = await User.findOne({ email });
+  if (!user)
+    return res
+      .status(404)
+      .json({ error: "Hesab tapılmadı (register lazımdır)" });
 
   const token = signAccessToken({ id: user._id.toString(), role: user.role });
 
@@ -132,9 +218,10 @@ export async function verifyOtp(req, res) {
     token,
     user: {
       id: user._id,
-      fullName: user.fullName,
-      phone: user.phone,
       role: user.role,
+      fullName: user.fullName,
+      email: user.email,
+      phone: user.phone,
       providerProfile:
         user.role === "provider" ? user.providerProfile : undefined,
     },

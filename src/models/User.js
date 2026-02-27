@@ -1,24 +1,34 @@
 import mongoose from "mongoose";
 
+const ProviderProfileSchema = new mongoose.Schema(
+  {
+    companyName: { type: String, trim: true },
+    primaryServices: [{ type: String, trim: true }],
+    location: { type: String, trim: true },
+    about: { type: String, trim: true },
+    verified: { type: Boolean, default: false },
+  },
+  { _id: false },
+);
+
 const UserSchema = new mongoose.Schema(
   {
-    fullName: { type: String, trim: true },
-    phone: { type: String, required: true, unique: true },
+    role: { type: String, enum: ["user", "provider", "admin"], required: true },
 
-    role: { type: String, enum: ["user", "provider", "admin"], default: "user" },
+    fullName: { type: String, required: true, trim: true },
 
-    providerProfile: {
-      companyName: String,
-      primaryServices: [String],
-      location: String,
-      about: String,
-      verified: { type: Boolean, default: false },
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
     },
+    phone: { type: String, required: true, unique: true, trim: true },
 
-    otpCode: String,
-    otpExpire: Date,
+    providerProfile: { type: ProviderProfileSchema, default: null },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 export default mongoose.models.User || mongoose.model("User", UserSchema);
