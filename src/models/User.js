@@ -24,9 +24,16 @@ const UserSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
+
     phone: { type: String, required: true, unique: true, trim: true },
 
+    password: { type: String, required: true },
+
+    // user-də null, provider-də object
     providerProfile: { type: ProviderProfileSchema, default: null },
+
+    // qeydiyyat OTP-si təsdiqlənibmi?
+    emailVerified: { type: Boolean, default: false },
   },
   { timestamps: true },
 );

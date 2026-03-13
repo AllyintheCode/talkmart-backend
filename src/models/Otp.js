@@ -9,7 +9,7 @@ const OtpSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
-    purpose: { type: String, default: "login" }, // login
+    purpose: { type: String, required: true }, // "register" | "login"
     otpHash: { type: String, required: true },
     expiresAt: { type: Date, required: true },
     attemptsLeft: { type: Number, default: 5 },
@@ -18,7 +18,9 @@ const OtpSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+// vaxt bitəndə özü silinsin
 OtpSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+// hər email+purpose üçün 1 OTP
 OtpSchema.index({ email: 1, purpose: 1 }, { unique: true });
 
 export default mongoose.models.Otp || mongoose.model("Otp", OtpSchema);
