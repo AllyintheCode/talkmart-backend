@@ -221,6 +221,78 @@ export default {
         }
       }
     },
+    "/users/user": {
+      "put": {
+        "summary": "Yalnız adi istifadəçi (User) məlumatlarını yenilə",
+        "tags": ["User"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fullName": { "type": "string", "example": "Yeni Ad Soyad" },
+                  "email": { "type": "string", "format": "email", "example": "yeniemail@example.com" },
+                  "password": { "type": "string", "format": "password", "example": "yenisirr123" },
+                  "confirmPassword": { "type": "string", "format": "password", "example": "yenisirr123" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "İstifadəçi profili uğurla yeniləndi." },
+          "400": { "description": "Şifrələr eyni deyil və ya validasiya xətası var" },
+          "401": { "description": "İcazəsiz (Token əskik və ya keçərsizdir)" },
+          "403": { "description": "Provider və ya Admin bu api-dən istifadə edə bilməz" },
+          "404": { "description": "İstifadəçi tapılmadı" },
+          "409": { "description": "E-poçt ünvanı artıq istifadədədir" }
+        }
+      }
+    },
+    "/users/provider": {
+      "put": {
+        "summary": "Yalnız xidmət təminatçısı (Provider) məlumatlarını yenilə",
+        "tags": ["User"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fullName": { "type": "string", "example": "Yeni Şirkət Sahibi" },
+                  "email": { "type": "string", "format": "email", "example": "sirket@example.com" },
+                  "password": { "type": "string", "format": "password", "example": "yenisirr123" },
+                  "confirmPassword": { "type": "string", "format": "password", "example": "yenisirr123" },
+                  "bio": { "type": "string", "example": "Xidmətlərimizi daha sərfəli və keyfiyyətli etdik. (Bioqrafiya)" },
+                  "location": { "type": "string", "example": "Gəncə, Azərbaycan" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Provider profili uğurla yeniləndi." },
+          "400": { "description": "Şifrələr eyni deyil və ya validasiya xətası var" },
+          "401": { "description": "İcazəsiz (Token əskik və ya keçərsizdir)" },
+          "403": { "description": "İstifadəçi provayder deyil (icazə yoxdur)" },
+          "404": { "description": "İstifadəçi tapılmadı" },
+          "409": { "description": "E-poçt ünvanı artıq istifadədədir" }
+        }
+      }
+    },
     "/videos/upload": {
       "post": {
         "summary": "Yeni xidmət videosu yüklə (Yalnız Providerlər üçün)",

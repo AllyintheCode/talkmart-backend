@@ -1,0 +1,131 @@
+import User from "../models/User.js";
+import bcrypt from "bcryptjs";
+
+// Hemo (ümumi) yoxlama funksiyası - parolları yoxlayıb, heşləyir
+const checkAndHashPassword = async (password, confirmPassword) => {
+  if (password || confirmPassword) {
+    if (password !== confirmPassword) {
+      throw new Error("Şifrələr ('password' və 'confirmPassword') bir-birinə uyğun gəlmir.");
+    }
+    const salt = await bcrypt.genSalt(10);
+    return await bcrypt.hash(password, salt);
+  }
+  return null;
+};
+
+// PUT /api/users/user
+// Yalnız asan (adi) istifadəçilərin (User) məlumatlarını yeniləyir
+export const updateUser = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { fullName, email, password, confirmPassword } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "İstifadəçi tapılmadı." });
+    }
+    
+    // Yalnız adi 'user' hesabı üçün
+    if (user.role !== "user") {
+      return res.status(403).json({ message: "Bu API yalnız adi istifadəçilər üçündür." });
+    }
+
+    // Əgər e-poçt dəyişirsə, yoxlayaq ki, digər istifadəçi eyni emaili tutmayıb
+    if (email && email !== user.email) {
+      const emailExists = await User.findOne({ email });
+      if (emailExists) {
+        return res.status(409).json({ message: "Bu E-poçt ünvanı artıq istifadə olunur." });
+      }
+      user.email = email;
+    }
+
+    // AdSoyad yeniləməsi
+    if (fullName !== undefined) user.fullName = fullName;
+
+    // Şifrə yeniləməsi
+    if (password) {
+      try {
+        const hashedPassword = await checkAndHashPassword(password, confirmPassword);
+        if (hashedPassword) user.password = hashedPassword;
+      } catch (e) {
+        return res.status(400).json({ message: e.message });
+      }
+    }
+
+    await user.save();
+
+    // Cavab (Response) qaytararkən şifrələri gizlət
+    const updatedUser = user.toObject();
+    delete updatedUser.password;
+    delete updatedUser.__v;
+
+    return res.json({
+      success: true,
+      message: "İstifadəçi profiliniz uğurla yeniləndi.",
+      user: updatedUser,
+    });
+  } catch (err) {
+    console.error("updateUser error:", err);
+    return res.status(500).json({ message: "Server xətası baş verdi." });
+  }
+};
+
+// PUT /api/users/provider
+// Xidmət Təminatçısı (Provider) məlumatlarını yeniləyir
+export const updateProvider = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { fullName, email, password, confirmPassword, bio, location } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "Provider tapılmadı." });
+    }
+
+    if (user.role !== "provider") {
+      return res.status(403).json({ message: "Bu API yalnız providerlər üçündür." });
+    }
+
+    // E-poçt yeniləməsi
+    if (email && email !== user.email) {
+      const emailExists = await User.findOne({ email });
+      if (emailExists) {
+        return res.status(409).json({ message: "Bu E-poçt ünvanı artıq istifadə olunur." });
+      }
+      user.email = email;
+    }
+
+    if (fullName !== undefined) user.fullName = fullName;
+
+    // Şifrə yeniləməsi
+    if (password) {
+      try {
+        const hashedPassword = await checkAndHashPassword(password, confirmPassword);
+        if (hashedPassword) user.password = hashedPassword;
+      } catch (e) {
+        return res.status(400).json({ message: e.message });
+      }
+    }
+
+    // Providerin Bio və Location hissəsi ("providerProfile.about" bərabərdir Bio-ya)
+    if (user.providerProfile) {
+      if (bio !== undefined) user.providerProfile.about = bio;
+      if (location !== undefined) user.providerProfile.location = location;
+    }
+
+    await user.save();
+
+    const updatedUser = user.toObject();
+    delete updatedUser.password;
+    delete updatedUser.__v;
+
+    return res.json({
+      success: true,
+      message: "Provider profiliniz uğurla yeniləndi.",
+      user: updatedUser,
+    });
+  } catch (err) {
+    console.error("updateProvider error:", err);
+    return res.status(500).json({ message: "Server xətası baş verdi." });
+  }
+};

@@ -4,6 +4,7 @@ import "dotenv/config";
 import { connectDB } from "./config/db.js";
 import authRoutes from "./routes/auth.routes.js";
 import videoRoutes from "./routes/video.routes.js";
+import userRoutes from "./routes/user.routes.js";
 import swaggerUi from "swagger-ui-express";
 import swaggerDocument from "./swagger.js";
 
@@ -14,6 +15,7 @@ app.use(express.json());
 
 app.use("/api/auth", authRoutes);
 app.use("/api/videos", videoRoutes);
+app.use("/api/users", userRoutes);
 
 // Swagger API Docs (Vercel Fix with CDNs)
 const CSS_URL = "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.1.0/swagger-ui.min.css";
