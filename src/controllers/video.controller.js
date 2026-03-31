@@ -176,7 +176,8 @@ export const getExploreVideos = async (req, res) => {
     const query = { status: "active" };
 
     if (categoryId) {
-      query.categoryId = categoryId;
+      // NoSQL injection qorunması: type-ı məcburi string edirik
+      query.categoryId = String(categoryId);
     }
 
     if (search) {
