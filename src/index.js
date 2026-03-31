@@ -1,5 +1,7 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import mongoSanitize from "express-mongo-sanitize";
 import "dotenv/config";
 import { connectDB } from "./config/db.js";
 import authRoutes from "./routes/auth.routes.js";
@@ -12,7 +14,15 @@ import swaggerDocument from "./swagger.js";
 
 const app = express();
 
+// Global Security Headers
+app.use(helmet());
+
+// NoSQL Injection Prevention
+app.use(mongoSanitize());
+
+// İcazə verilən Origin-lər (Frontend / Flutter) -> Production-da * əvəzinə URL qoyulmalıdır
 app.use(cors());
+
 app.use(express.json());
 
 // Public (Unrestricted) Routes

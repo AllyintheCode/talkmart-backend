@@ -8,20 +8,21 @@ import {
   verifyForgotOtp,
   resetPassword,
 } from "../controllers/auth.controller.js";
+import { authLimiter } from "../middlewares/rateLimit.middleware.js";
 
 const router = Router();
 
-// register + auto otp
-router.post("/register/user", registerUser);
-router.post("/register/provider", registerProvider);
-router.post("/register/verify-otp", verifyRegisterOtp);
+// register + auto otp (Rate Limit ilə qorunur)
+router.post("/register/user", authLimiter, registerUser);
+router.post("/register/provider", authLimiter, registerProvider);
+router.post("/register/verify-otp", authLimiter, verifyRegisterOtp);
   
 // login (email + password)
-router.post("/login", login);
+router.post("/login", authLimiter, login);
 
 // forgot password
-router.post("/forgot-password", forgotPassword);
-router.post("/forgot-password/verify-otp", verifyForgotOtp);
-router.post("/forgot-password/reset-password", resetPassword);
+router.post("/forgot-password", authLimiter, forgotPassword);
+router.post("/forgot-password/verify-otp", authLimiter, verifyForgotOtp);
+router.post("/forgot-password/reset-password", authLimiter, resetPassword);
 
 export default router;

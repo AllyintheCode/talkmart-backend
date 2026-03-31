@@ -16,3 +16,21 @@ export const engagementLimiter = rateLimit({
     return req.user?._id?.toString() || (req.ip || "unknown").replace(/:/g, "_");
   },
 });
+
+// Qeydiyyat, Login və Şifrə Yeniləmə (Auth & OTP) üçün limiter
+// Hər IP (və ya mail) 10 dəqiqədə maksimum 5 giriş/cəhd edə bilər
+export const authLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 dəqiqə
+  max: 5, // 5 cəhd
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: "RATE_LIMIT_EXCEEDED",
+    message: "Həddindən artıq cəhd etdiniz. Lütfən 10 dəqiqə sonra yenidən cəhd edin.",
+  },
+  keyGenerator: (req) => {
+    // E-mail əsaslı və ya İP əsaslı qorunma
+    return req.body?.email || req.ip || "unknown";
+  },
+});

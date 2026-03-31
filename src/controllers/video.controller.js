@@ -180,8 +180,9 @@ export const getExploreVideos = async (req, res) => {
     }
 
     if (search) {
-      // Regex ilə həm başlıq, həm də açıqlama daxilində eyni anda axtarış var:
-      const searchRegex = new RegExp(search, "i");
+      // ReDoS (Regex Denial of Service) hücumlarının qarşısını almaq üçün xüsusi simvolları təmizləyirik
+      const safeSearch = String(search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const searchRegex = new RegExp(safeSearch, "i");
       query.$or = [{ title: searchRegex }, { description: searchRegex }];
     }
 
