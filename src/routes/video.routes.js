@@ -1,5 +1,11 @@
 import { Router } from "express";
-import { createVideo, getMyVideos, deleteVideo } from "../controllers/video.controller.js";
+import {
+  createVideo,
+  getMyVideos,
+  deleteVideo,
+  getFeedVideos,
+  getExploreVideos,
+} from "../controllers/video.controller.js";
 import {
   toggleLike,
   toggleSave,
@@ -11,6 +17,12 @@ import { uploadVideo } from "../middlewares/upload.middleware.js";
 import { engagementLimiter } from "../middlewares/rateLimit.middleware.js";
 
 const router = Router();
+
+// ============================
+// PUBLIC FEED / EXPLORE ROUTE-ları
+// ============================
+router.get("/feed", getFeedVideos);
+router.get("/explore", getExploreVideos);
 
 // ============================
 //  Engagement route-ları (user + provider)

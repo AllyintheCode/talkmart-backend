@@ -293,6 +293,36 @@ export default {
         }
       }
     },
+    "/videos/feed": {
+      "get": {
+        "summary": "Ana Səhifə (Reels) üçün sonsuz təsadüfi/trend videolar (TikTok tərzi)",
+        "tags": ["Video"],
+        "security": [],
+        "parameters": [
+          { "in": "query", "name": "limit", "schema": { "type": "integer", "default": 10 } }
+        ],
+        "responses": {
+          "200": { "description": "Təsadüfi seçilmiş (yalnız aktiv) videolar axını" }
+        }
+      }
+    },
+    "/videos/explore": {
+      "get": {
+        "summary": "Kəşf Et (Explore) səhifəsi üçün kateqoriyalı və axtarışlı list",
+        "tags": ["Video"],
+        "security": [],
+        "parameters": [
+          { "in": "query", "name": "page", "schema": { "type": "integer", "default": 1 } },
+          { "in": "query", "name": "limit", "schema": { "type": "integer", "default": 15 } },
+          { "in": "query", "name": "categoryId", "schema": { "type": "string" }, "description": "Yalnız bu kateqoriya İD-dəki videolar" },
+          { "in": "query", "name": "search", "schema": { "type": "string" }, "description": "Başlıq və ya açıqlamaya əsasən axtarış" },
+          { "in": "query", "name": "sort", "schema": { "type": "string", "enum": ["newest", "trending", "price_low", "price_high"] }, "description": "Sıralama (default: newest)" }
+        ],
+        "responses": {
+          "200": { "description": "Səhifələnmiş, filterlənmiş videolar siyahısı (Explore grid)" }
+        }
+      }
+    },
     "/videos/upload": {
       "post": {
         "summary": "Yeni xidmət videosu yüklə (Yalnız Providerlər üçün)",
@@ -303,11 +333,12 @@ export default {
             "multipart/form-data": {
               "schema": {
                 "type": "object",
-                "required": ["title", "description", "price", "video"],
+                "required": ["title", "description", "price", "categoryId", "video"],
                 "properties": {
                   "title": { "type": "string", "description": "Video xidmətinin başlığı", "example": "Peşəkar Santexnika Xidməti" },
                   "description": { "type": "string", "description": "Xidmət haqqında ətraflı məlumat", "example": "Boru və su xətlərini tez bir zamanda təmir edirik." },
                   "price": { "type": "number", "format": "float", "description": "Xidmət videosu üzrə təyin edilmiş qiymət", "example": 50.5 },
+                  "categoryId": { "type": "string", "description": "Sistemin bazasından gələn Kateqoriya ObjectId-si" },
                   "video": { "type": "string", "format": "binary", "description": "Əsas video faylı (.mp4, .mov, vs.) Maksimum 500MB." }
                 }
               }

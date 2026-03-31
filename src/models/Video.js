@@ -8,6 +8,12 @@ const VideoSchema = new mongoose.Schema(
       required: true,
     },
 
+    categoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Category",
+      required: true,
+    },
+
     title: {
       type: String,
       trim: true,
