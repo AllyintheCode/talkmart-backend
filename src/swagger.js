@@ -1,14 +1,14 @@
 export default {
   "openapi": "3.0.0",
   "info": {
-    "title": "TalkMart API Documentation",
-    "description": "Backend API endpoints for Flutter developers. Contains Auth and Video Video services.",
+    "title": "TalkMart API Sənədləri",
+    "description": "Flutter tərtibatçıları üçün Backend API endpointləri. Autentifikasiya və Video xidmətlərini ehtiva edir.",
     "version": "1.0.0"
   },
   "servers": [
     {
       "url": "http://localhost:5000/api",
-      "description": "Local development server"
+      "description": "Lokal inkişaf serveri"
     }
   ],
   "components": {
@@ -28,10 +28,8 @@ export default {
   "paths": {
     "/auth/register/user": {
       "post": {
-        "summary": "Register a new user",
-        "tags": [
-          "Authentication"
-        ],
+        "summary": "Yeni istifadəçi qeydiyyatı",
+        "tags": ["Authentication"],
         "security": [],
         "requestBody": {
           "required": true,
@@ -39,55 +37,28 @@ export default {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "fullName",
-                  "phone",
-                  "email",
-                  "password"
-                ],
+                "required": ["fullName", "phone", "email", "password"],
                 "properties": {
-                  "fullName": {
-                    "type": "string",
-                    "example": "John Doe"
-                  },
-                  "phone": {
-                    "type": "string",
-                    "example": "+994551234567"
-                  },
-                  "email": {
-                    "type": "string",
-                    "format": "email",
-                    "example": "john@example.com"
-                  },
-                  "password": {
-                    "type": "string",
-                    "format": "password",
-                    "example": "secret123"
-                  }
+                  "fullName": { "type": "string", "example": "Əli Əliyev" },
+                  "phone": { "type": "string", "example": "+994551234567" },
+                  "email": { "type": "string", "format": "email", "example": "ali@example.com" },
+                  "password": { "type": "string", "format": "password", "example": "sirr123" }
                 }
               }
             }
           }
         },
         "responses": {
-          "201": {
-            "description": "Registration completed, OTP sent to email."
-          },
-          "400": {
-            "description": "Validation error"
-          },
-          "409": {
-            "description": "Email or phone already registered"
-          }
+          "201": { "description": "Qeydiyyat tamamlandı, e-poçta OTP göndərildi." },
+          "400": { "description": "Validasiya xətası" },
+          "409": { "description": "E-poçt və ya telefon artıq qeydiyyatdan keçib" }
         }
       }
     },
     "/auth/register/provider": {
       "post": {
-        "summary": "Register a new provider",
-        "tags": [
-          "Authentication"
-        ],
+        "summary": "Yeni xidmət təminatçısı (provider) qeydiyyatı",
+        "tags": ["Authentication"],
         "security": [],
         "requestBody": {
           "required": true,
@@ -95,81 +66,36 @@ export default {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "fullName",
-                  "companyName",
-                  "phone",
-                  "email",
-                  "password",
-                  "primaryServices",
-                  "location",
-                  "about"
-                ],
+                "required": ["fullName", "companyName", "phone", "email", "password", "primaryServices", "location", "about"],
                 "properties": {
-                  "fullName": {
-                    "type": "string",
-                    "example": "Jane Smith"
-                  },
-                  "companyName": {
-                    "type": "string",
-                    "example": "Jane's Cleaning"
-                  },
-                  "phone": {
-                    "type": "string",
-                    "example": "+994501234567"
-                  },
-                  "email": {
-                    "type": "string",
-                    "format": "email",
-                    "example": "jane@example.com"
-                  },
-                  "password": {
-                    "type": "string",
-                    "format": "password",
-                    "example": "secret123"
-                  },
+                  "fullName": { "type": "string", "example": "Cəmilə Məmmədova" },
+                  "companyName": { "type": "string", "example": "Cəmilə Təmizlik" },
+                  "phone": { "type": "string", "example": "+994501234567" },
+                  "email": { "type": "string", "format": "email", "example": "cemile@example.com" },
+                  "password": { "type": "string", "format": "password", "example": "sirr123" },
                   "primaryServices": {
                     "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "example": [
-                      "Cleaning",
-                      "Plumbing"
-                    ]
+                    "items": { "type": "string" },
+                    "example": ["Təmizlik", "Santexnika"]
                   },
-                  "location": {
-                    "type": "string",
-                    "example": "Baku, Azerbaijan"
-                  },
-                  "about": {
-                    "type": "string",
-                    "example": "We offer the best cleaning services in the city."
-                  }
+                  "location": { "type": "string", "example": "Bakı, Azərbaycan" },
+                  "about": { "type": "string", "example": "Şəhərdə ən yaxşı təmizlik xidmətlərini təklif edirik." }
                 }
               }
             }
           }
         },
         "responses": {
-          "201": {
-            "description": "Registration completed, OTP sent to email."
-          },
-          "400": {
-            "description": "Validation error"
-          },
-          "409": {
-            "description": "Email or phone already registered"
-          }
+          "201": { "description": "Qeydiyyat tamamlandı, e-poçta OTP göndərildi." },
+          "400": { "description": "Validasiya xətası" },
+          "409": { "description": "E-poçt və ya telefon artıq qeydiyyatdan keçib" }
         }
       }
     },
     "/auth/register/verify-otp": {
       "post": {
-        "summary": "Verify OTP sent for registration",
-        "tags": [
-          "Authentication"
-        ],
+        "summary": "Qeydiyyat üçün göndərilmiş OTP-ni təsdiqlə",
+        "tags": ["Authentication"],
         "security": [],
         "requestBody": {
           "required": true,
@@ -177,44 +103,26 @@ export default {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "email",
-                  "code"
-                ],
+                "required": ["email", "code"],
                 "properties": {
-                  "email": {
-                    "type": "string",
-                    "format": "email",
-                    "example": "john@example.com"
-                  },
-                  "code": {
-                    "type": "string",
-                    "example": "123456"
-                  }
+                  "email": { "type": "string", "format": "email", "example": "ali@example.com" },
+                  "code": { "type": "string", "example": "123456" }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {
-            "description": "Successfully verified email and returns User & JWT token."
-          },
-          "400": {
-            "description": "Invalid OTP or expired"
-          },
-          "429": {
-            "description": "Too many failed exact attempts"
-          }
+          "200": { "description": "E-poçt uğurla təsdiqləndi və İstifadəçi məlumatları & JWT token qaytarılır." },
+          "400": { "description": "Yanlış OTP və ya vaxtı keçib" },
+          "429": { "description": "Çox sayda uyğun olmayan cəhd" }
         }
       }
     },
     "/auth/login": {
       "post": {
-        "summary": "Login user or provider with Email & Password",
-        "tags": [
-          "Authentication"
-        ],
+        "summary": "İstifadəçi və ya providerin E-poçt & Şifrə ilə daxil olması",
+        "tags": ["Authentication"],
         "security": [],
         "requestBody": {
           "required": true,
@@ -222,42 +130,25 @@ export default {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "email",
-                  "password"
-                ],
+                "required": ["email", "password"],
                 "properties": {
-                  "email": {
-                    "type": "string",
-                    "format": "email",
-                    "example": "john@example.com"
-                  },
-                  "password": {
-                    "type": "string",
-                    "format": "password",
-                    "example": "secret123"
-                  }
+                  "email": { "type": "string", "format": "email", "example": "ali@example.com" },
+                  "password": { "type": "string", "format": "password", "example": "sirr123" }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {
-            "description": "Successful login, returns JWT token and User Info."
-          },
-          "401": {
-            "description": "Invalid credentials"
-          }
+          "200": { "description": "Uğurlu giriş, JWT token və İstifadəçi məlumatlarını qaytarır." },
+          "401": { "description": "Yanlış məlumatlar (şifrə və ya e-poçt səhvdir)" }
         }
       }
     },
     "/auth/forgot-password": {
       "post": {
-        "summary": "Request a password reset OTP",
-        "tags": [
-          "Authentication"
-        ],
+        "summary": "Şifrənin sıfırlanması üçün OTP tələb et",
+        "tags": ["Authentication"],
         "security": [],
         "requestBody": {
           "required": true,
@@ -265,33 +156,23 @@ export default {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "email"
-                ],
+                "required": ["email"],
                 "properties": {
-                  "email": {
-                    "type": "string",
-                    "format": "email",
-                    "example": "john@example.com"
-                  }
+                  "email": { "type": "string", "format": "email", "example": "ali@example.com" }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {
-            "description": "OTP sent (always returns success if email is formatted properly, for security reasons)."
-          }
+          "200": { "description": "OTP göndərildi (Təhlükəsizlik məqsədilə, format düzgündürsə həmişə uğur qaytarır)." }
         }
       }
     },
     "/auth/forgot-password/verify-otp": {
       "post": {
-        "summary": "Verify the forgot password OTP",
-        "tags": [
-          "Authentication"
-        ],
+        "summary": "Şifrə sıfırlamaq üçün göndərilən OTP-ni təsdiqlə",
+        "tags": ["Authentication"],
         "security": [],
         "requestBody": {
           "required": true,
@@ -299,41 +180,25 @@ export default {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "email",
-                  "code"
-                ],
+                "required": ["email", "code"],
                 "properties": {
-                  "email": {
-                    "type": "string",
-                    "format": "email",
-                    "example": "john@example.com"
-                  },
-                  "code": {
-                    "type": "string",
-                    "example": "123456"
-                  }
+                  "email": { "type": "string", "format": "email", "example": "ali@example.com" },
+                  "code": { "type": "string", "example": "123456" }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {
-            "description": "Successfully verified code, returns a temporary reset token."
-          },
-          "400": {
-            "description": "Invalid OTP or expired"
-          }
+          "200": { "description": "Kod uğurla təsdiqləndi, müvəqqəti sıfırlama tokeni (reset token) qaytarır." },
+          "400": { "description": "Yanlış OTP və ya vaxtı keçib" }
         }
       }
     },
     "/auth/forgot-password/reset-password": {
       "post": {
-        "summary": "Reset the password using the temporary reset token",
-        "tags": [
-          "Authentication"
-        ],
+        "summary": "Müvəqqəti token vasitəsilə şifrəni yenilə",
+        "tags": ["Authentication"],
         "security": [],
         "requestBody": {
           "required": true,
@@ -341,146 +206,239 @@ export default {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "resetToken",
-                  "newPassword"
-                ],
+                "required": ["resetToken", "newPassword"],
                 "properties": {
-                  "resetToken": {
-                    "type": "string",
-                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                  },
-                  "newPassword": {
-                    "type": "string",
-                    "format": "password",
-                    "example": "newSecret123"
-                  }
+                  "resetToken": { "type": "string", "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." },
+                  "newPassword": { "type": "string", "format": "password", "example": "yeniSirr123" }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": {
-            "description": "Password reset successfully."
-          },
-          "400": {
-            "description": "Invalid or expired reset token."
-          }
+          "200": { "description": "Şifrə uğurla dəyişdirildi." },
+          "400": { "description": "Yanlış və ya vaxtı keçmiş sıfırlama tokeni." }
         }
       }
     },
     "/videos/upload": {
       "post": {
-        "summary": "Upload a new service video (Only Providers)",
-        "tags": [
-          "Video"
-        ],
+        "summary": "Yeni xidmət videosu yüklə (Yalnız Providerlər üçün)",
+        "tags": ["Video"],
         "requestBody": {
           "required": true,
           "content": {
             "multipart/form-data": {
               "schema": {
                 "type": "object",
-                "required": [
-                  "title",
-                  "description",
-                  "price",
-                  "video"
-                ],
+                "required": ["title", "description", "price", "video"],
                 "properties": {
-                  "title": {
-                    "type": "string",
-                    "description": "Title of the video service",
-                    "example": "Pro Plumbing Service"
-                  },
-                  "description": {
-                    "type": "string",
-                    "description": "Detailed description of the service",
-                    "example": "We install and repair pipes quickly."
-                  },
-                  "price": {
-                    "type": "number",
-                    "format": "float",
-                    "description": "Price tag for the service video",
-                    "example": 50.5
-                  },
-                  "video": {
-                    "type": "string",
-                    "format": "binary",
-                    "description": "The actual video file (.mp4, .mov, etc.) Max 500MB."
-                  }
+                  "title": { "type": "string", "description": "Video xidmətinin başlığı", "example": "Peşəkar Santexnika Xidməti" },
+                  "description": { "type": "string", "description": "Xidmət haqqında ətraflı məlumat", "example": "Boru və su xətlərini tez bir zamanda təmir edirik." },
+                  "price": { "type": "number", "format": "float", "description": "Xidmət videosu üzrə təyin edilmiş qiymət", "example": 50.5 },
+                  "video": { "type": "string", "format": "binary", "description": "Əsas video faylı (.mp4, .mov, vs.) Maksimum 500MB." }
                 }
               }
             }
           }
         },
         "responses": {
-          "201": {
-            "description": "Video successfully uploaded to Cloudinary and saved to DB."
-          },
-          "400": {
-            "description": "Validation error, missing items, or invalid file."
-          },
-          "401": {
-            "description": "Unauthorized (Token missing or invalid)"
-          },
-          "403": {
-            "description": "Forbidden (User is not a Provider)"
-          }
+          "201": { "description": "Video uğurla Cloudinary-yə yükləndi və bazada yadda saxlanıldı." },
+          "400": { "description": "Validasiya xətası, əskik məlumatlar və ya keçərsiz fayl." },
+          "401": { "description": "İcazəsiz (Token əskikdir və ya keçərsizdir)" },
+          "403": { "description": "Qadağan edilib (İstifadəçi Provider deyil)" }
         }
       }
     },
     "/videos/my-videos": {
       "get": {
-        "summary": "Get all videos uploaded by the authenticated Provider",
-        "tags": [
-          "Video"
-        ],
+        "summary": "Providerin öz yüklədiyi bütün videoları gətir",
+        "tags": ["Video"],
         "responses": {
-          "200": {
-            "description": "Returns an array of provider's videos."
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden (Not a provider)"
-          }
+          "200": { "description": "Providerin videolarından ibarət massiv (array) qaytarır." },
+          "401": { "description": "İcazəsiz" },
+          "403": { "description": "Qadağan edilib (Provider deyil)" }
         }
       }
     },
     "/videos/{id}": {
       "delete": {
-        "summary": "Delete a video by ID",
-        "tags": [
-          "Video"
-        ],
+        "summary": "İD-yə əsasən videonu sil",
+        "tags": ["Video"],
         "parameters": [
           {
             "in": "path",
             "name": "id",
             "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "The MongoDB ObjectId of the Video",
+            "schema": { "type": "string" },
+            "description": "Videonun MongoDB ObjectId-si",
+            "example": "64efc9abc1234567890def12"
+          }
+        ],
+        "responses": {
+          "200": { "description": "Video uğurla həm MDB (baza), həm də Cloudinary-dən silindi." },
+          "401": { "description": "İcazəsiz" },
+          "403": { "description": "Qadağan edilib (Provider deyil)" },
+          "404": { "description": "Video tapılmadı və ya sizə aid deyil." }
+        }
+      }
+    },
+    "/videos/{id}/like": {
+      "post": {
+        "summary": "Videonu bəyən / bəyənməkdən voz keç (Toggle Like)",
+        "description": "Videonu bəyənmək və ya bəyənməkdən çıxarmaq üçün istifadə olunur. Hər istifadəçi videonu yalnız 1 dəfə bəyənə bilər. Təkrar çağırıldıqda bəyənmə geri alınır (toggle). Həm istifadəçilər, həm də providerlər üçün keçərlidir. Anti-fake: İstifadəçilər öz videolarını bəyənə bilməz. Rate limit: dəqiqədə 30 istək.\n",
+        "tags": ["Engagement"],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Videonun MongoDB ObjectId-si",
             "example": "64efc9abc1234567890def12"
           }
         ],
         "responses": {
           "200": {
-            "description": "Successfully deleted the video from DB and Cloudinary."
+            "description": "Bəyənmə statusunu və yenilənmiş likeCount (bəyənmə sayını) qaytarır.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "liked": { "type": "boolean", "description": "Videonun hazırda bəyənilib-bəyənilməməsi.", "example": true },
+                    "likeCount": { "type": "integer", "example": 42 },
+                    "message": { "type": "string", "example": "Like edildi." }
+                  }
+                }
+              }
+            }
           },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "403": {
-            "description": "Forbidden (Not a provider)"
-          },
-          "404": {
-            "description": "Video not found or you don't own it."
+          "400": { "description": "Keçərsiz video ID formatı" },
+          "401": { "description": "İcazəsiz" },
+          "403": { "description": "Öz videonuzu bəyənə bilməzsiniz" },
+          "404": { "description": "Video tapılmadı" },
+          "429": { "description": "Çox sayda istək (rate limit aşıldı)" }
+        }
+      }
+    },
+    "/videos/{id}/save": {
+      "post": {
+        "summary": "Videonu yadda saxla / yaddaşdan sil (Toggle Save/Bookmark)",
+        "description": "Videonu yadda saxlamaq və ya silmək. Hər istifadəçi yalnız 1 dəfə yadda saxlaya bilər. Təkrar çağırıldıqda yaddaşdan silinir (toggle). Həm istifadəçilər, həm də providerlər üçün. Anti-fake: İstifadəçilər öz videolarını yadda saxlaya bilməz. Rate limit: dəqiqədə 30 istək.\n",
+        "tags": ["Engagement"],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Videonun MongoDB ObjectId-si",
+            "example": "64efc9abc1234567890def12"
           }
+        ],
+        "responses": {
+          "200": {
+            "description": "Yadda saxlama statusunu və yenilənmiş saveCount (yaddaşlanma sayını) qaytarır.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "saved": { "type": "boolean", "description": "Videonun hazırda yadda saxlanılıb-saxlanılmaması.", "example": true },
+                    "saveCount": { "type": "integer", "example": 15 },
+                    "message": { "type": "string", "example": "Video kayd edildi." }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Keçərsiz video ID formatı" },
+          "401": { "description": "İcazəsiz" },
+          "403": { "description": "Öz videonuzu yadda saxlaya bilməzsiniz" },
+          "404": { "description": "Video tapılmadı" },
+          "429": { "description": "Çox sayda istək (rate limit aşıldı)" }
+        }
+      }
+    },
+    "/videos/{id}/view": {
+      "post": {
+        "summary": "Video üçün baxış qeyd etməklə (24 saatlıq limitli)",
+        "description": "Baxış (view) sayını qeyd edir. Anti-fake önləmləri: 1) Eyni istifadəçi hər 24 saatda yalnız 1 baxış qeyd edə bilər. 2) Provider öz videosunun baxış sayını artıra bilməz. 3) Rate limit: dəqiqədə 30 istək. 4) Atomik sayğaclar qorunması. Kimsə videoya baxmağa başlayanda bu endpoint-i çağırın.\n",
+        "tags": ["Engagement"],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Videonun MongoDB ObjectId-si",
+            "example": "64efc9abc1234567890def12"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Baxışın nəzərə alınıb-alınmadığını və cari baxış (viewCount) sayını qaytarır.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "counted": { "type": "boolean", "description": "Baxışın məqbul sayılıb-sayılmadığını göstərir.", "example": true },
+                    "viewCount": { "type": "integer", "example": 128 },
+                    "message": { "type": "string", "example": "Görüntülənmə qeyd edildi." }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Keçərsiz video ID formatı" },
+          "401": { "description": "İcazəsiz" },
+          "404": { "description": "Video tapılmadı" },
+          "429": { "description": "Çox sayda istək (rate limit aşıldı)" }
+        }
+      }
+    },
+    "/videos/{id}/engagement": {
+      "get": {
+        "summary": "Video üçün statistika (baxış sayı + user statusu) gətir",
+        "description": "Videonun bəyənmə/baxış/yaddaşlanma saylarını və mövcud istifadəçinin onu bəyənib/yadda saxlayıb-saxlamadığını qaytarır. UI dizaynı hazırlamaq üçün faydalıdır.\n",
+        "tags": ["Engagement"],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Videonun MongoDB ObjectId-si",
+            "example": "64efc9abc1234567890def12"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bütün etkileşim/statistika məlumatlarını qaytarır.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "likeCount": { "type": "integer", "example": 42 },
+                    "viewCount": { "type": "integer", "example": 128 },
+                    "saveCount": { "type": "integer", "example": 15 },
+                    "isLiked": { "type": "boolean", "description": "Cari istifadəçi bu videonu bəyənibmi.", "example": true },
+                    "isSaved": { "type": "boolean", "description": "Cari istifadəçi bu videonu yadda saxlayıbmı.", "example": false }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Keçərsiz video ID formatı" },
+          "401": { "description": "İcazəsiz" },
+          "404": { "description": "Video tapılmadı" }
         }
       }
     }

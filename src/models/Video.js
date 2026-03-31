@@ -46,6 +46,21 @@ const VideoSchema = new mongoose.Schema(
       default: 0,
     },
 
+    likeCount: {
+      type: Number,
+      default: 0,
+    },
+
+    viewCount: {
+      type: Number,
+      default: 0,
+    },
+
+    saveCount: {
+      type: Number,
+      default: 0,
+    },
+
     status: {
       type: String,
       enum: ["active", "inactive"],
