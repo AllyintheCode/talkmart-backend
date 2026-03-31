@@ -28,3 +28,30 @@ export const uploadVideo = multer({
   fileFilter,
   limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB
 });
+
+// ============================
+// IMAGE UPLOADS
+// ============================
+const imageStorage = new CloudinaryStorage({
+  cloudinary,
+  params: {
+    folder: "talkmart/images",
+    resource_type: "image",
+    allowed_formats: ["jpg", "jpeg", "png", "webp", "gif"],
+  },
+});
+
+const imageFilter = (req, file, cb) => {
+  const allowedImages = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+  if (allowedImages.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error("Yalnız şəkil faylları qəbul edilir (jpg, png, webp, gif)."), false);
+  }
+};
+
+export const uploadImage = multer({
+  storage: imageStorage,
+  fileFilter: imageFilter,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB per image limit
+});

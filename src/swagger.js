@@ -513,6 +513,190 @@ export default {
           "404": { "description": "Video tapılmadı" }
         }
       }
+    },
+    "/onboarding": {
+      "get": {
+        "summary": "Bütün onboarding ekranlarını sıralı olaraq gətir",
+        "tags": ["Public"],
+        "security": [],
+        "responses": {
+          "200": { "description": "Ekranların siyahısı" }
+        }
+      }
+    },
+    "/categories": {
+      "get": {
+        "summary": "Yalnız aktiv xidmət kateqoriyalarını gətir",
+        "tags": ["Public"],
+        "security": [],
+        "responses": {
+          "200": { "description": "Katoqoriyaların siyahısı" }
+        }
+      }
+    },
+    "/admin/categories": {
+      "get": {
+        "summary": "Bütün kateqoriyaları gətir (Həm aktiv, həm deaktiv)",
+        "tags": ["Admin/Categories"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Bütün kateqoriyalar" }
+        }
+      },
+      "post": {
+        "summary": "Yeni kateqoriya yarat",
+        "tags": ["Admin/Categories"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["name"],
+                "properties": {
+                  "name": { "type": "string", "example": "Təmizlik" },
+                  "status": { "type": "string", "enum": ["active", "inactive"], "example": "active" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Kateqoriya yaradıldı" }
+        }
+      }
+    },
+    "/admin/categories/{id}": {
+      "put": {
+        "summary": "Mövcud kateqoriyanı yenilə",
+        "tags": ["Admin/Categories"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "status": { "type": "string", "enum": ["active", "inactive"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Kateqoriya yeniləndi" }
+        }
+      },
+      "delete": {
+        "summary": "Mövcud kateqoriyanı sil",
+        "tags": ["Admin/Categories"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "path", "name": "id", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "Kateqoriya silindi" }
+        }
+      }
+    },
+    "/admin/onboarding": {
+      "post": {
+        "summary": "Yeni Onboarding ekranı yarat (Yalnız Admin)",
+        "tags": ["Admin/Onboarding"],
+        "security": [
+          { "bearerAuth": [] }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["title", "description", "image"],
+                "properties": {
+                  "title": { "type": "string", "example": "Xoş Gəldiniz!" },
+                  "description": { "type": "string", "example": "TalkMart-da ən yaxşı xidmətləri tapın." },
+                  "order": { "type": "number", "example": 1 },
+                  "image": { "type": "string", "format": "binary", "description": "Ekran şəkli (Maksimum 10MB)" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Onboarding ekranı yaradıldı." },
+          "400": { "description": "Validasiya xətası" },
+          "401": { "description": "İcazəsiz" },
+          "403": { "description": "Admin deyil" }
+        }
+      }
+    },
+    "/admin/onboarding/{id}": {
+      "put": {
+        "summary": "Mövcud Onboarding ekranını yenilə (Yalnız Admin)",
+        "tags": ["Admin/Onboarding"],
+        "security": [
+          { "bearerAuth": [] }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Onboarding ObjectId-si"
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string" },
+                  "description": { "type": "string" },
+                  "order": { "type": "number" },
+                  "image": { "type": "string", "format": "binary" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Ekran yeniləndi." },
+          "401": { "description": "İcazəsiz" },
+          "403": { "description": "Admin deyil" },
+          "404": { "description": "Ekran tapılmadı" }
+        }
+      },
+      "delete": {
+        "summary": "Mövcud Onboarding ekranını sil (Yalnız Admin)",
+        "tags": ["Admin/Onboarding"],
+        "security": [
+          { "bearerAuth": [] }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Onboarding ObjectId-si"
+          }
+        ],
+        "responses": {
+          "200": { "description": "Ekran silindi." },
+          "401": { "description": "İcazəsiz" },
+          "403": { "description": "Admin deyil" },
+          "404": { "description": "Ekran tapılmadı" }
+        }
+      }
     }
   }
 };
