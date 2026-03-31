@@ -7,11 +7,17 @@ import {
   createCategory,
   updateCategory,
   deleteCategory,
+  getDashboardStats,
 } from "../controllers/admin.controller.js";
 import { verifyToken, adminOnly } from "../middlewares/auth.middleware.js";
 import { uploadImage } from "../middlewares/upload.middleware.js";
 
 const router = Router();
+
+// ============================
+// DASHBOARD ROUTE-ları
+// ============================
+router.get("/dashboard/stats", verifyToken, adminOnly, getDashboardStats);
 
 // ============================
 // KATEQORİYA ROUTE-ları

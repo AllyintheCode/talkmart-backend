@@ -1,6 +1,89 @@
 import Onboarding from "../models/Onboarding.js";
 import Category from "../models/Category.js";
+import User from "../models/User.js";
+import Video from "../models/Video.js";
 import cloudinary from "../config/cloudinary.js";
+
+// ============================
+// DASHBOARD STATİSTİKALARI (ADMIN)
+// ============================
+
+export const getDashboardStats = async (req, res) => {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // 1. User Metrics
+    const totalUsers = await User.countDocuments({ role: "user" });
+    const totalProviders = await User.countDocuments({ role: "provider" });
+    const newSignupsLast30Days = await User.countDocuments({
+      createdAt: { $gte: thirtyDaysAgo }
+    });
+
+    // 2. Content & Activity Metrics
+    const totalVideos = await Video.countDocuments();
+    const activeCategories = await Category.countDocuments({ status: "active" });
+    
+    // Aggregation for total engagements
+    const engagementStats = await Video.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalViews: { $sum: "$viewCount" },
+          totalLikes: { $sum: "$likeCount" },
+          totalSaves: { $sum: "$saveCount" }
+        }
+      }
+    ]);
+    const totalEngagements = engagementStats[0] || { totalViews: 0, totalLikes: 0, totalSaves: 0 };
+
+    // 3. Leaderboards
+    // Top 5 Videos by Views
+    const topVideos = await Video.find()
+      .sort({ viewCount: -1 })
+      .limit(5)
+      .populate("providerId", "fullName email") // Şirkət adını gətirmək
+      .select("title viewCount likeCount thumbnail providerId");
+
+    // Top 5 Providers by uploaded videos
+    const topProvidersAgg = await Video.aggregate([
+      { $group: { _id: "$providerId", videoCount: { $sum: 1 } } },
+      { $sort: { videoCount: -1 } },
+      { $limit: 5 },
+      {
+        $lookup: {
+          from: "users",
+          localField: "_id",
+          foreignField: "_id",
+          as: "provider"
+        }
+      },
+      { $unwind: "$provider" },
+      {
+        $project: {
+          _id: 1,
+          videoCount: 1,
+          fullName: "$provider.fullName",
+          email: "$provider.email",
+          companyName: "$provider.providerProfile.companyName"
+        }
+      }
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      stats: {
+        users: { totalUsers, totalProviders, newSignupsLast30Days },
+        content: { totalVideos, activeCategories, totalEngagements },
+        leaderboards: { topVideos, topProviders: topProvidersAgg }
+      }
+    });
+
+  } catch (err) {
+    console.error("getDashboardStats error:", err);
+    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
+  }
+};
 
 // ============================
 // CATEGORY İDARƏETMƏSİ (ADMIN)

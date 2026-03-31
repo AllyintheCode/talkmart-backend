@@ -514,6 +514,16 @@ export default {
         }
       }
     },
+    "/admin/dashboard/stats": {
+      "get": {
+        "summary": "Admin dashboard üçün unikal hesabatlar və daxili statistikalar",
+        "tags": ["Admin/Dashboard"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { "description": "Dashboard məlumatları" }
+        }
+      }
+    },
     "/onboarding": {
       "get": {
         "summary": "Bütün onboarding ekranlarını sıralı olaraq gətir",
