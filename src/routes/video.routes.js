@@ -29,7 +29,31 @@ router.get("/:id/engagement", verifyToken, getEngagement);
 router.post("/upload", verifyToken, providerOnly, (req, res, next) => {
   uploadVideo.single("video")(req, res, (err) => {
     if (err) {
-      return res.status(400).json({ message: err.message });
+      if (err.code === "LIMIT_FILE_SIZE") {
+        return res.status(413).json({
+          error: "FILE_TOO_LARGE",
+          message: "Video faylın həcmi çox böyükdür (Maksimum 500MB).",
+        });
+      }
+      if (err.message && err.message.includes("Yalnız video faylları")) {
+        return res.status(415).json({
+          error: "UNSUPPORTED_FORMAT",
+          message: "Dəstəklənməyən media formatı (Yalnız mp4, mov, avi, mkv).",
+        });
+      }
+      // Timeout və ya connection reset (İnternet kəsilməsi)
+      if (err.code === "ECONNRESET" || err.message.includes("network") || err.message.includes("timeout")) {
+        return res.status(408).json({
+          error: "NETWORK_ERROR",
+          message: "İnternet bağlantısı kəsildi və ya zaman aşımı oldu.",
+        });
+      }
+      // Digər upload xətaları
+      return res.status(500).json({ 
+        error: "UPLOAD_FAILED",
+        message: "Video yüklənməsi zamanı xəta baş verdi.",
+        details: err.message
+      });
     }
     next();
   });

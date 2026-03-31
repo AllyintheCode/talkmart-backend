@@ -5,22 +5,22 @@ import cloudinary from "../config/cloudinary.js";
 export const createVideo = async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ message: "Video fayl tələb olunur." });
+      return res.status(400).json({ error: "MISSING_FILE", message: "Video fayl tələb olunur." });
     }
 
     const { description, price, title } = req.body;
 
     if (!description || description.trim() === "") {
-      return res.status(400).json({ message: "Açıqlama tələb olunur." });
+      return res.status(400).json({ error: "MISSING_DESCRIPTION", message: "Açıqlama tələb olunur." });
     }
 
     if (price === undefined || price === null || price === "") {
-      return res.status(400).json({ message: "Qiymət tələb olunur." });
+      return res.status(400).json({ error: "MISSING_PRICE", message: "Qiymət tələb olunur." });
     }
 
     const parsedPrice = parseFloat(price);
     if (isNaN(parsedPrice) || parsedPrice < 0) {
-      return res.status(400).json({ message: "Qiymət düzgün deyil." });
+      return res.status(400).json({ error: "INVALID_PRICE", message: "Qiymət düzgün deyil." });
     }
 
     // Cloudinary-dən gələn URL və public_id
@@ -50,7 +50,11 @@ export const createVideo = async (req, res) => {
     });
   } catch (err) {
     console.error("createVideo error:", err);
-    return res.status(500).json({ message: "Server xətası." });
+    // Cloudinary və ya digər infrastruktur xətaları
+    if (err.name === "TimeoutError" || err.message.includes("timeout")) {
+      return res.status(408).json({ error: "NETWORK_ERROR", message: "Bağlantı zaman aşımına uğradı." });
+    }
+    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası baş verdi. Zəhmət olmasa yenidən cəhd edin." });
   }
 };
 
