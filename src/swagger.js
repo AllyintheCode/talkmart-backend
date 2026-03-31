@@ -1,0 +1,488 @@
+export default {
+  "openapi": "3.0.0",
+  "info": {
+    "title": "TalkMart API Documentation",
+    "description": "Backend API endpoints for Flutter developers. Contains Auth and Video Video services.",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5000/api",
+      "description": "Local development server"
+    }
+  ],
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/auth/register/user": {
+      "post": {
+        "summary": "Register a new user",
+        "tags": [
+          "Authentication"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "fullName",
+                  "phone",
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "fullName": {
+                    "type": "string",
+                    "example": "John Doe"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "example": "+994551234567"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "john@example.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "example": "secret123"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Registration completed, OTP sent to email."
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "409": {
+            "description": "Email or phone already registered"
+          }
+        }
+      }
+    },
+    "/auth/register/provider": {
+      "post": {
+        "summary": "Register a new provider",
+        "tags": [
+          "Authentication"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "fullName",
+                  "companyName",
+                  "phone",
+                  "email",
+                  "password",
+                  "primaryServices",
+                  "location",
+                  "about"
+                ],
+                "properties": {
+                  "fullName": {
+                    "type": "string",
+                    "example": "Jane Smith"
+                  },
+                  "companyName": {
+                    "type": "string",
+                    "example": "Jane's Cleaning"
+                  },
+                  "phone": {
+                    "type": "string",
+                    "example": "+994501234567"
+                  },
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "jane@example.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "example": "secret123"
+                  },
+                  "primaryServices": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "Cleaning",
+                      "Plumbing"
+                    ]
+                  },
+                  "location": {
+                    "type": "string",
+                    "example": "Baku, Azerbaijan"
+                  },
+                  "about": {
+                    "type": "string",
+                    "example": "We offer the best cleaning services in the city."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Registration completed, OTP sent to email."
+          },
+          "400": {
+            "description": "Validation error"
+          },
+          "409": {
+            "description": "Email or phone already registered"
+          }
+        }
+      }
+    },
+    "/auth/register/verify-otp": {
+      "post": {
+        "summary": "Verify OTP sent for registration",
+        "tags": [
+          "Authentication"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "code"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "john@example.com"
+                  },
+                  "code": {
+                    "type": "string",
+                    "example": "123456"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully verified email and returns User & JWT token."
+          },
+          "400": {
+            "description": "Invalid OTP or expired"
+          },
+          "429": {
+            "description": "Too many failed exact attempts"
+          }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Login user or provider with Email & Password",
+        "tags": [
+          "Authentication"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "password"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "john@example.com"
+                  },
+                  "password": {
+                    "type": "string",
+                    "format": "password",
+                    "example": "secret123"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful login, returns JWT token and User Info."
+          },
+          "401": {
+            "description": "Invalid credentials"
+          }
+        }
+      }
+    },
+    "/auth/forgot-password": {
+      "post": {
+        "summary": "Request a password reset OTP",
+        "tags": [
+          "Authentication"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "john@example.com"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OTP sent (always returns success if email is formatted properly, for security reasons)."
+          }
+        }
+      }
+    },
+    "/auth/forgot-password/verify-otp": {
+      "post": {
+        "summary": "Verify the forgot password OTP",
+        "tags": [
+          "Authentication"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "email",
+                  "code"
+                ],
+                "properties": {
+                  "email": {
+                    "type": "string",
+                    "format": "email",
+                    "example": "john@example.com"
+                  },
+                  "code": {
+                    "type": "string",
+                    "example": "123456"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successfully verified code, returns a temporary reset token."
+          },
+          "400": {
+            "description": "Invalid OTP or expired"
+          }
+        }
+      }
+    },
+    "/auth/forgot-password/reset-password": {
+      "post": {
+        "summary": "Reset the password using the temporary reset token",
+        "tags": [
+          "Authentication"
+        ],
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "resetToken",
+                  "newPassword"
+                ],
+                "properties": {
+                  "resetToken": {
+                    "type": "string",
+                    "example": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  },
+                  "newPassword": {
+                    "type": "string",
+                    "format": "password",
+                    "example": "newSecret123"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Password reset successfully."
+          },
+          "400": {
+            "description": "Invalid or expired reset token."
+          }
+        }
+      }
+    },
+    "/videos/upload": {
+      "post": {
+        "summary": "Upload a new service video (Only Providers)",
+        "tags": [
+          "Video"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "title",
+                  "description",
+                  "price",
+                  "video"
+                ],
+                "properties": {
+                  "title": {
+                    "type": "string",
+                    "description": "Title of the video service",
+                    "example": "Pro Plumbing Service"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "Detailed description of the service",
+                    "example": "We install and repair pipes quickly."
+                  },
+                  "price": {
+                    "type": "number",
+                    "format": "float",
+                    "description": "Price tag for the service video",
+                    "example": 50.5
+                  },
+                  "video": {
+                    "type": "string",
+                    "format": "binary",
+                    "description": "The actual video file (.mp4, .mov, etc.) Max 500MB."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Video successfully uploaded to Cloudinary and saved to DB."
+          },
+          "400": {
+            "description": "Validation error, missing items, or invalid file."
+          },
+          "401": {
+            "description": "Unauthorized (Token missing or invalid)"
+          },
+          "403": {
+            "description": "Forbidden (User is not a Provider)"
+          }
+        }
+      }
+    },
+    "/videos/my-videos": {
+      "get": {
+        "summary": "Get all videos uploaded by the authenticated Provider",
+        "tags": [
+          "Video"
+        ],
+        "responses": {
+          "200": {
+            "description": "Returns an array of provider's videos."
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden (Not a provider)"
+          }
+        }
+      }
+    },
+    "/videos/{id}": {
+      "delete": {
+        "summary": "Delete a video by ID",
+        "tags": [
+          "Video"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The MongoDB ObjectId of the Video",
+            "example": "64efc9abc1234567890def12"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successfully deleted the video from DB and Cloudinary."
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "403": {
+            "description": "Forbidden (Not a provider)"
+          },
+          "404": {
+            "description": "Video not found or you don't own it."
+          }
+        }
+      }
+    }
+  }
+};

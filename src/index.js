@@ -5,13 +5,7 @@ import { connectDB } from "./config/db.js";
 import authRoutes from "./routes/auth.routes.js";
 import videoRoutes from "./routes/video.routes.js";
 import swaggerUi from "swagger-ui-express";
-import YAML from "yamljs";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const swaggerDocument = YAML.load(path.join(__dirname, "swagger.yaml"));
+import swaggerDocument from "./swagger.js";
 
 const app = express();
 
@@ -21,8 +15,19 @@ app.use(express.json());
 app.use("/api/auth", authRoutes);
 app.use("/api/videos", videoRoutes);
 
-// Swagger API Docs
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
+// Swagger API Docs (Vercel Fix with CDNs)
+const CSS_URL = "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.1.0/swagger-ui.min.css";
+app.use(
+  "/api-docs",
+  swaggerUi.serve,
+  swaggerUi.setup(swaggerDocument, {
+    customCssUrl: CSS_URL,
+    customJs: [
+      "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.1.0/swagger-ui-bundle.min.js",
+      "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.1.0/swagger-ui-standalone-preset.min.js",
+    ],
+  })
+);
 
 const PORT = process.env.PORT || 5000;
 
