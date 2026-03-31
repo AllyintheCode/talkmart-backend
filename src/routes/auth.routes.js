@@ -15,7 +15,7 @@ const router = Router();
 router.post("/register/user", registerUser);
 router.post("/register/provider", registerProvider);
 router.post("/register/verify-otp", verifyRegisterOtp);
-
+  
 // login (email + password)
 router.post("/login", login);
 
