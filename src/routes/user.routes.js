@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { updateUser, updateProvider, getProviderContact } from "../controllers/user.controller.js";
-import { requireAuth, providerOnly } from "../middlewares/auth.middleware.js";
+import { requireAuth, providerOnly, optionalAuth } from "../middlewares/auth.middleware.js";
 
 const router = Router();
 
