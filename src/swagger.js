@@ -300,6 +300,7 @@ export default {
     "/videos/feed": {
       "get": {
         "summary": "Ana Səhifə (Reels) üçün sonsuz təsadüfi/trend videolar (TikTok tərzi)",
+        "description": "🔓 **GUEST DOSTu** — Token olmadan da işləyir. Login olmamış istifadəçilər videoları sərbəst izləyə bilər.",
         "tags": ["Video"],
         "security": [],
         "parameters": [
@@ -313,6 +314,7 @@ export default {
     "/videos/explore": {
       "get": {
         "summary": "Kəşf Et (Explore) səhifəsi üçün kateqoriyalı və axtarışlı list",
+        "description": "🔓 **GUEST DOSTu** — Token olmadan da işləyir. Login olmamış istifadəçilər sərbəst axtarış edə bilər.",
         "tags": ["Video"],
         "security": [],
         "parameters": [
@@ -377,8 +379,6 @@ export default {
             "in": "path",
             "name": "id",
             "required": true,
-            "schema": { "type": "string" },
-            "description": "Videonun MongoDB ObjectId-si",
             "example": "64efc9abc1234567890def12"
           }
         ],
@@ -393,8 +393,9 @@ export default {
     "/videos/{id}/like": {
       "post": {
         "summary": "Videonu bəyən / bəyənməkdən voz keç (Toggle Like)",
-        "description": "Videonu bəyənmək və ya bəyənməkdən çıxarmaq üçün istifadə olunur. Hər istifadəçi videonu yalnız 1 dəfə bəyənə bilər. Təkrar çağırıldıqda bəyənmə geri alınır (toggle). Həm istifadəçilər, həm də providerlər üçün keçərlidir. Anti-fake: İstifadəçilər öz videolarını bəyənə bilməz. Rate limit: dəqiqədə 30 istək.\n",
+        "description": "🔐 **LOGIN TƏLƏB OLUNUR** — Token olmadan `LOGIN_REQUIRED` xətası qaytarılır. Mobil tətbiq bu xətaı alıb istifadəçini login ekranına aparmalıdır.\n\nBäyənmək və ya bəyənməkdən çıxarmaq üçün istifadə olunur. Anti-fake: Öz videolarınızı bəyənə bilməzsiniz. Rate limit: dəqiqədə 30 istək.",
         "tags": ["Engagement"],
+        "security": [{ "bearerAuth": [] }],
         "parameters": [
           {
             "in": "path",
@@ -414,7 +415,7 @@ export default {
                   "type": "object",
                   "properties": {
                     "success": { "type": "boolean", "example": true },
-                    "liked": { "type": "boolean", "description": "Videonun hazırda bəyənilib-bəyənilməməsi.", "example": true },
+                    "liked": { "type": "boolean", "example": true },
                     "likeCount": { "type": "integer", "example": 42 },
                     "message": { "type": "string", "example": "Like edildi." }
                   }
@@ -423,18 +424,33 @@ export default {
             }
           },
           "400": { "description": "Keçərsiz video ID formatı" },
-          "401": { "description": "İcazəsiz" },
+          "401": {
+            "description": "🔐 Token yoxdur → LOGIN_REQUIRED — Mobil bu kodu alıb login ekranına yönləndirir",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": false },
+                    "error": { "type": "string", "example": "LOGIN_REQUIRED" },
+                    "message": { "type": "string", "example": "Bu əməliyyat üçün giriş tələb olunur." }
+                  }
+                }
+              }
+            }
+          },
           "403": { "description": "Öz videonuzu bəyənə bilməzsiniz" },
           "404": { "description": "Video tapılmadı" },
-          "429": { "description": "Çox sayda istək (rate limit aşıldı)" }
+          "429": { "description": "Çox saydə istək (rate limit aşıldı)" }
         }
       }
     },
     "/videos/{id}/save": {
       "post": {
         "summary": "Videonu yadda saxla / yaddaşdan sil (Toggle Save/Bookmark)",
-        "description": "Videonu yadda saxlamaq və ya silmək. Hər istifadəçi yalnız 1 dəfə yadda saxlaya bilər. Təkrar çağırıldıqda yaddaşdan silinir (toggle). Həm istifadəçilər, həm də providerlər üçün. Anti-fake: İstifadəçilər öz videolarını yadda saxlaya bilməz. Rate limit: dəqiqədə 30 istək.\n",
+        "description": "🔐 **LOGIN TƏLƏB OLUNUR** — Token olmadan `LOGIN_REQUIRED` xətası qaytarılır. Mobil tətbiq bu xətaı alıb istifadəçini login ekranına aparmalıdır.\n\nYadda saxlamaq və ya silmək. Anti-fake: Öz videolarınızı yadda saxlaya bilməzsiniz. Rate limit: dəqiqədə 30 istək.",
         "tags": ["Engagement"],
+        "security": [{ "bearerAuth": [] }],
         "parameters": [
           {
             "in": "path",
@@ -447,14 +463,14 @@ export default {
         ],
         "responses": {
           "200": {
-            "description": "Yadda saxlama statusunu və yenilənmiş saveCount (yaddaşlanma sayını) qaytarır.",
+            "description": "Yadda saxlama statusunu və yenilnmiş saveCount qaytarır.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
                     "success": { "type": "boolean", "example": true },
-                    "saved": { "type": "boolean", "description": "Videonun hazırda yadda saxlanılıb-saxlanılmaması.", "example": true },
+                    "saved": { "type": "boolean", "example": true },
                     "saveCount": { "type": "integer", "example": 15 },
                     "message": { "type": "string", "example": "Video kayd edildi." }
                   }
@@ -463,18 +479,33 @@ export default {
             }
           },
           "400": { "description": "Keçərsiz video ID formatı" },
-          "401": { "description": "İcazəsiz" },
+          "401": {
+            "description": "🔐 Token yoxdur → LOGIN_REQUIRED — Mobil bu kodu alıb login ekranına yönləndirir",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": false },
+                    "error": { "type": "string", "example": "LOGIN_REQUIRED" },
+                    "message": { "type": "string", "example": "Bu əməliyyat üçün giriş tələb olunur." }
+                  }
+                }
+              }
+            }
+          },
           "403": { "description": "Öz videonuzu yadda saxlaya bilməzsiniz" },
           "404": { "description": "Video tapılmadı" },
-          "429": { "description": "Çox sayda istək (rate limit aşıldı)" }
+          "429": { "description": "Çox saydə istək (rate limit aşıldı)" }
         }
       }
     },
     "/videos/{id}/view": {
       "post": {
-        "summary": "Video üçün baxış qeyd etməklə (24 saatlıq limitli)",
-        "description": "Baxış (view) sayını qeyd edir. Anti-fake önləmləri: 1) Eyni istifadəçi hər 24 saatda yalnız 1 baxış qeyd edə bilər. 2) Provider öz videosunun baxış sayını artıra bilməz. 3) Rate limit: dəqiqədə 30 istək. 4) Atomik sayğaclar qorunması. Kimsə videoya baxmağa başlayanda bu endpoint-i çağırın.\n",
+        "summary": "Video üçün baxış qeyd et (24 saatlıq limitli)",
+        "description": "🔓 **GUEST DOSTu** — Token olmadan da işləyir. Guest baxışlar anonim sayılır.\n\nLogin olan istifadəçilər üçün 24 saatlıq rate-limit tətbiq edilir. Provider öz videosunun sayını artıra bilməz. Rate limit: dəqiqədə 30 istək.",
         "tags": ["Engagement"],
+        "security": [],
         "parameters": [
           {
             "in": "path",
@@ -494,7 +525,7 @@ export default {
                   "type": "object",
                   "properties": {
                     "success": { "type": "boolean", "example": true },
-                    "counted": { "type": "boolean", "description": "Baxışın məqbul sayılıb-sayılmadığını göstərir.", "example": true },
+                    "counted": { "type": "boolean", "example": true },
                     "viewCount": { "type": "integer", "example": 128 },
                     "message": { "type": "string", "example": "Görüntülənmə qeyd edildi." }
                   }
@@ -503,7 +534,6 @@ export default {
             }
           },
           "400": { "description": "Keçərsiz video ID formatı" },
-          "401": { "description": "İcazəsiz" },
           "404": { "description": "Video tapılmadı" },
           "429": { "description": "Çox sayda istək (rate limit aşıldı)" }
         }
@@ -511,9 +541,10 @@ export default {
     },
     "/videos/{id}/engagement": {
       "get": {
-        "summary": "Video üçün statistika (baxış sayı + user statusu) gətir",
-        "description": "Videonun bəyənmə/baxış/yaddaşlanma saylarını və mövcud istifadəçinin onu bəyənib/yadda saxlayıb-saxlamadığını qaytarır. UI dizaynı hazırlamaq üçün faydalıdır.\n",
+        "summary": "Video üçün statistika və user statusu gətir",
+        "description": "🔓 **GUEST DOSTu** — Token olmadan da işləyir. Guest üçün `isLiked: false`, `isSaved: false`, `isGuest: true` qaytarılır. Login olan istifadəçilər üçün real status gəlir.",
         "tags": ["Engagement"],
+        "security": [],
         "parameters": [
           {
             "in": "path",
@@ -526,26 +557,110 @@ export default {
         ],
         "responses": {
           "200": {
-            "description": "Bütün etkileşim/statistika məlumatlarını qaytarır.",
+            "description": "Bütün statistika məlumatlarını qaytarır.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "success": { "type": "boolean", "example": true },
+                    "success":   { "type": "boolean", "example": true },
                     "likeCount": { "type": "integer", "example": 42 },
                     "viewCount": { "type": "integer", "example": 128 },
                     "saveCount": { "type": "integer", "example": 15 },
-                    "isLiked": { "type": "boolean", "description": "Cari istifadəçi bu videonu bəyənibmi.", "example": true },
-                    "isSaved": { "type": "boolean", "description": "Cari istifadəçi bu videonu yadda saxlayıbmı.", "example": false }
+                    "isLiked":   { "type": "boolean", "description": "Cari istifadəçi bu videonu bəyənibmi. Guest üçün həmişə false.", "example": true },
+                    "isSaved":   { "type": "boolean", "description": "Cari istifadəçi bu videonu yadda saxlayıbmı. Guest üçün həmişə false.", "example": false },
+                    "isGuest":   { "type": "boolean", "description": "Token olmadan istek gəlibsə true qaytarılır.", "example": false }
                   }
                 }
               }
             }
           },
           "400": { "description": "Keçərsiz video ID formatı" },
-          "401": { "description": "İcazəsiz" },
           "404": { "description": "Video tapılmadı" }
+        }
+      }
+    },
+    "/users/provider/{id}/contact": {
+      "get": {
+        "summary": "Providerin əlaqə məlumatlarını gətir",
+        "description": "🔐 **LOGIN TƏLƏB OLUNUR** — Token olmadan `LOGIN_REQUIRED` xətası qaytarılır. Mobil tətbiq bu xətaı alıb istifadəçini login ekranına aparmalıdır.\n\nLogin olan istifadəçilər providerin telefon, e-poçt, şirkət adı, yer, vebsayt, Instagram və WhatsApp məlumatlarını gətirə bilər.",
+        "tags": ["User"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Providerin MongoDB ObjectId-si",
+            "example": "64efc9abc1234567890def12"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Providerin əlaqə məlumatlarını qaytarır.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "contact": {
+                      "type": "object",
+                      "properties": {
+                        "fullName":    { "type": "string", "example": "Cəmilə Məmmədova" },
+                        "email":       { "type": "string", "example": "cemile@example.com" },
+                        "phone":       { "type": "string", "example": "+994501234567", "nullable": true },
+                        "companyName": { "type": "string", "example": "Cəmilə Təmizlik", "nullable": true },
+                        "location":    { "type": "string", "example": "Bakı, Azərbaycan", "nullable": true },
+                        "website":     { "type": "string", "example": "https://cemile.az", "nullable": true },
+                        "instagram":   { "type": "string", "example": "@cemile_temizlik", "nullable": true },
+                        "whatsapp":    { "type": "string", "example": "+994501234567", "nullable": true }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "🔐 Token yoxdur → LOGIN_REQUIRED",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": false },
+                    "error":   { "type": "string", "example": "LOGIN_REQUIRED" },
+                    "message": { "type": "string", "example": "Bu əməliyyat üçün giriş tələb olunur." }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "description": "Provider tapılmadı və ya bu istifadəçi provider deyil" }
+        }
+      }
+    },
+    "/users/provider/{id}/whatsapp": {
+      "get": {
+        "summary": "Provider'ın WhatsApp nömrəsinə birbaşa yönləndirmə (302 Redirect)",
+        "description": "🔓 **GUEST DOSTU** — Token tələb olunmur. Qonaqlar da birbaşa WhatsApp-a yönləndirilə bilər.\n\nBu endpoint brauzerdə və ya mobil tətbiqdə birbaşa çağırıldıqda `https://wa.me/number` ünvanına 302 yönləndirməsi edir.",
+        "tags": ["User"],
+        "security": [],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Providerin MongoDB ObjectId-si",
+            "example": "64efc9abc1234567890def12"
+          }
+        ],
+        "responses": {
+          "302": { "description": "WhatsApp-a yönləndirmə uğurludur." },
+          "404": { "description": "Provider tapılmadı" }
         }
       }
     },

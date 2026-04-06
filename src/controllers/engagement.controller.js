@@ -152,12 +152,11 @@ export const toggleSave = async (req, res) => {
 // ==================== VIEW (24-saat rate-limit) ====================
 
 // POST /api/videos/:id/view  →  görüntülənmə qeyd et
+// Guest (req.user = null) halda IP äsasında anonim say edirik
 export const recordView = async (req, res) => {
   try {
     const videoId = req.params.id;
-    const userId = req.user._id;
 
-    // ObjectId format yoxla
     if (!isValidObjectId(videoId)) {
       return res.status(400).json({ message: "Yanlış video ID formatı." });
     }
@@ -166,6 +165,26 @@ export const recordView = async (req, res) => {
     if (!video) {
       return res.status(404).json({ message: "Video tapılmadı." });
     }
+
+    // ====== GUEST (login olmamış) ======
+    // IP äsasında anonim view — sadecə say, hesdə qeyd yoxdur
+    if (!req.user || req.user.role === "guest") {
+      const updated = await Video.findByIdAndUpdate(
+        videoId,
+        { $inc: { viewCount: 1 } },
+        { new: true }
+      ).select("viewCount");
+
+      return res.json({
+        success: true,
+        counted: true,
+        viewCount: updated.viewCount,
+        message: "Görüntülənmə qeyd edildi.",
+      });
+    }
+
+    // ====== LOGIN OLMUŞ İSTIFADƎÇİ ======
+    const userId = req.user._id;
 
     // Öz videosunu görüntülənmə kimi sayma
     if (video.providerId.toString() === userId.toString()) {
@@ -184,7 +203,6 @@ export const recordView = async (req, res) => {
         (Date.now() - existing.lastViewedAt.getTime()) / (1000 * 60 * 60);
 
       if (hoursSinceLast < 24) {
-        // 24 saat keçməyib, sayma
         return res.json({
           success: true,
           counted: false,
@@ -193,15 +211,12 @@ export const recordView = async (req, res) => {
         });
       }
 
-      // 24 saat keçib, yenilə və say (atomik $inc)
       existing.lastViewedAt = new Date();
       await existing.save();
     } else {
-      // İlk dəfə görüntüləyir
       await VideoView.create({ videoId, userId, lastViewedAt: new Date() });
     }
 
-    // Atomik $inc ilə viewCount artır
     const updated = await Video.findByIdAndUpdate(
       videoId,
       { $inc: { viewCount: 1 } },
@@ -216,7 +231,6 @@ export const recordView = async (req, res) => {
     });
   } catch (err) {
     if (err.code === 11000) {
-      // Race condition — artıq qeyd edilib
       return res.json({ success: true, counted: false, message: "Artıq qeyd edilib." });
     }
     console.error("recordView error:", err);
@@ -227,12 +241,11 @@ export const recordView = async (req, res) => {
 // ==================== GET ENGAGEMENT STATUS ====================
 
 // GET /api/videos/:id/engagement  →  user üçün status + saylar
+// Guest (req.user = null) halda: isLiked/isSaved = false qaytırılır
 export const getEngagement = async (req, res) => {
   try {
     const videoId = req.params.id;
-    const userId = req.user._id;
 
-    // ObjectId format yoxla
     if (!isValidObjectId(videoId)) {
       return res.status(400).json({ message: "Yanlış video ID formatı." });
     }
@@ -242,6 +255,22 @@ export const getEngagement = async (req, res) => {
       return res.status(404).json({ message: "Video tapılmadı." });
     }
 
+    // ====== GUEST ======
+    // Sayları göstər, amma isLiked/isSaved = false (DB sorgusu yoxdur)
+    if (!req.user || req.user.role === "guest") {
+      return res.json({
+        success: true,
+        likeCount: video.likeCount,
+        viewCount: video.viewCount,
+        saveCount: video.saveCount,
+        isLiked: false,
+        isSaved: false,
+        isGuest: true,
+      });
+    }
+
+    // ====== LOGIN OLMUŞ İSTIFADƎÇİ ======
+    const userId = req.user._id;
     const [liked, saved] = await Promise.all([
       VideoLike.exists({ videoId, userId }),
       VideoSave.exists({ videoId, userId }),
@@ -254,6 +283,7 @@ export const getEngagement = async (req, res) => {
       saveCount: video.saveCount,
       isLiked: !!liked,
       isSaved: !!saved,
+      isGuest: false,
     });
   } catch (err) {
     console.error("getEngagement error:", err);

@@ -129,3 +129,73 @@ export const updateProvider = async (req, res) => {
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };
+
+// ============================================================
+// GET /api/users/provider/:id/contact
+// Providerin əlaqə məlumatlarını qaytarır
+// requireAuth ilə qorunur — guest → LOGIN_REQUIRED (route səviyyəsində)
+// ============================================================
+export const getProviderContact = async (req, res) => {
+  try {
+    const provider = await User.findById(req.params.id)
+      .select("fullName email phone role providerProfile")
+      .lean();
+
+    if (!provider) {
+      return res.status(404).json({ message: "Provider tapılmadı." });
+    }
+
+    if (provider.role !== "provider") {
+      return res.status(404).json({ message: "Bu istifadəçi provider deyil." });
+    }
+
+    return res.json({
+      success: true,
+      contact: {
+        fullName:    provider.fullName,
+        email:       provider.email,
+        phone:       provider.phone   || null,
+        companyName: provider.providerProfile?.companyName || null,
+        location:    provider.providerProfile?.location    || null,
+        website:     provider.providerProfile?.website     || null,
+        instagram:   provider.providerProfile?.instagram   || null,
+        whatsapp:    provider.providerProfile?.whatsapp    || null,
+      },
+    });
+  } catch (err) {
+    console.error("getProviderContact error:", err);
+    return res.status(500).json({ message: "Server xətası baş verdi." });
+  }
+};
+// ============================================================
+// GET /api/users/provider/:id/whatsapp
+// Provider'ın WhatsApp nömrəsinə birbaşa yönləndirmə (302 Redirect)
+// ============================================================
+export const redirectToWhatsapp = async (req, res) => {
+  try {
+    const provider = await User.findById(req.params.id)
+      .select("phone role providerProfile")
+      .lean();
+
+    if (!provider || provider.role !== "provider") {
+      return res.status(404).json({ message: "Provider tapılmadı." });
+    }
+
+    // Əgər providerProfile-da xüsusi whatsapp nömrəsi varsa onu, yoxdursa əsas telefonu götür
+    const whatsappNumber = provider.providerProfile?.whatsapp || provider.phone;
+    
+    if (!whatsappNumber) {
+      return res.status(400).json({ message: "Bu provider-in WhatsApp məlumatı yoxdur." });
+    }
+
+    // Telefon nömrəsini təmizləmək (təkcə rəqəmlər)
+    const cleanNumber = whatsappNumber.replace(/\D/g, "");
+    const whatsappUrl = `https://wa.me/${cleanNumber}`;
+
+    // Birbaşa yönləndirmə
+    return res.redirect(whatsappUrl);
+  } catch (err) {
+    console.error("redirectToWhatsapp error:", err);
+    return res.status(500).json({ message: "Server xətası baş verdi." });
+  }
+};

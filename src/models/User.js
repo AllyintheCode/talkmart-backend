@@ -13,7 +13,7 @@ const ProviderProfileSchema = new mongoose.Schema(
 
 const UserSchema = new mongoose.Schema(
   {
-    role: { type: String, enum: ["user", "provider", "admin"], required: true },
+    role: { type: String, enum: ["guest", "user", "provider", "admin"], default: "user", required: true },
 
     fullName: { type: String, required: true, trim: true },
 

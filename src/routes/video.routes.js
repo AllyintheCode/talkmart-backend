@@ -12,7 +12,7 @@ import {
   recordView,
   getEngagement,
 } from "../controllers/engagement.controller.js";
-import { verifyToken, providerOnly } from "../middlewares/auth.middleware.js";
+import { verifyToken, providerOnly, requireAuth, optionalAuth } from "../middlewares/auth.middleware.js";
 import { uploadVideo } from "../middlewares/upload.middleware.js";
 import { engagementLimiter } from "../middlewares/rateLimit.middleware.js";
 
@@ -20,18 +20,30 @@ const router = Router();
 
 // ============================
 // PUBLIC FEED / EXPLORE ROUTE-ları
+// optionalAuth: guest izləyə bilər, login olanlar üçün isLiked/isSaved qaytarılır
 // ============================
-router.get("/feed", getFeedVideos);
-router.get("/explore", getExploreVideos);
+router.get("/feed", optionalAuth, getFeedVideos);
+router.get("/explore", optionalAuth, getExploreVideos);
 
 // ============================
-//  Engagement route-ları (user + provider)
-//  verifyToken + rate limiter
+// Engagement — Görüntülənmə (guest + login)
+// optionalAuth: guest anonim view edə bilər
 // ============================
-router.post("/:id/like", verifyToken, engagementLimiter, toggleLike);
-router.post("/:id/save", verifyToken, engagementLimiter, toggleSave);
-router.post("/:id/view", verifyToken, engagementLimiter, recordView);
-router.get("/:id/engagement", verifyToken, getEngagement);
+router.post("/:id/view", optionalAuth, engagementLimiter, recordView);
+
+// ============================
+// Engagement statusu (like/save sayları)
+// optionalAuth: guest sayları görə bilər, isLiked/isSaved = false olacaq
+// ============================
+router.get("/:id/engagement", optionalAuth, getEngagement);
+
+// ============================
+// Like / Save — LOGIN TƏLƏB OLUNUR
+// requireAuth: token yoxdursa → 401 + LOGIN_REQUIRED
+// Mobil tətbiq bu kodu alıb login ekranına yönləndirir
+// ============================
+router.post("/:id/like", requireAuth, engagementLimiter, toggleLike);
+router.post("/:id/save", requireAuth, engagementLimiter, toggleSave);
 
 // ============================
 //  Provider-only route-lar
