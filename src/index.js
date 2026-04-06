@@ -14,7 +14,19 @@ import swaggerDocument from "./swagger.js";
 const app = express();
 
 // Global Security Headers
-app.use(helmet());
+// Global Security Headers (Relaxed CSP for Swagger UI on Vercel)
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        "script-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+        "style-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+        "img-src": ["'self'", "data:", "https://res.cloudinary.com"],
+      },
+    },
+  })
+);
 
 // İcazə verilən Origin-lər (Frontend / Flutter) -> Production-da * əvəzinə URL qoyulmalıdır
 app.use(cors());

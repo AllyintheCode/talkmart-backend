@@ -7,6 +7,10 @@ export default {
   },
   "servers": [
     {
+      "url": "https://talkmart-backend.vercel.app/api",
+      "description": "Production (Vercel)"
+    },
+    {
       "url": "http://localhost:5000/api",
       "description": "Lokal inkişaf serveri"
     }
