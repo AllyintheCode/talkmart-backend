@@ -51,7 +51,7 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization"],
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: "10kb" })); // ✅ JSON body limit — memory overflow qorunması
 
 // Public (Unrestricted) Routes
 app.use("/api", publicRoutes);
@@ -80,7 +80,14 @@ app.use(
 
 const PORT = process.env.PORT || 5000;
 
+// ✅ JWT_SECRET güc yoxlaması — zəif key ilə server başlamasın
+const JWT_SECRET = process.env.JWT_SECRET || "";
+if (!JWT_SECRET || JWT_SECRET.length < 32) {
+  console.error("❌ FATAL: JWT_SECRET .env-də yoxdur və ya çox qısadır (min 32 simvol). Server dayandırıldı.");
+  process.exit(1);
+}
+
 connectDB().then(() => {
   app.listen(PORT, () => console.log(`🚀 Server: http://localhost:${PORT}`));
 });
-export default app;
+export default app;

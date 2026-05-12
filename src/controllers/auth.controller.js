@@ -261,6 +261,16 @@ export async function login(req, res) {
         .status(401)
         .json({ error: "Email və ya şifrə yanlışdır" });
 
+    // Email təsdiqlənməyibsə girişə icazə verilmir
+    if (!user.emailVerified) {
+      return res.status(403).json({
+        error: "EMAIL_NOT_VERIFIED",
+        message: "Zəhmət olmasa əvvəlcə emailə göndərilən OTP-ni təsdiqləyin.",
+        email: user.email,
+        next: "register_verify_otp",
+      });
+    }
+
     const token = signAccessToken({ id: user._id.toString(), role: user.role });
 
     return res.json({
