@@ -239,20 +239,31 @@ export const getExploreVideos = async (req, res) => {
     const skip = (page - 1) * limit;
     const userId = req.user?._id || null;
 
-    const { categoryId, search, sort } = req.query;
+    const { categoryId, search, sort, location, minPrice, maxPrice } = req.query;
 
     const matchStage = { status: "active" };
 
+    // Kateqoriya filteri
     if (categoryId) {
-      // NoSQL injection qorunması: type-ı məcburi string edirik
       matchStage.categoryId = new mongoose.Types.ObjectId(String(categoryId));
     }
 
+    // Ad / açıqlama axtarışı
     if (search) {
-      // ReDoS (Regex Denial of Service) hücumlarının qarşısını almaq üçün xüsusi simvolları təmizləyirik
       const safeSearch = String(search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const searchRegex = new RegExp(safeSearch, "i");
       matchStage.$or = [{ title: searchRegex }, { description: searchRegex }];
+    }
+
+    // Qiymət aralığı filteri
+    if (minPrice !== undefined || maxPrice !== undefined) {
+      matchStage.price = {};
+      if (minPrice !== undefined && !isNaN(parseFloat(minPrice))) {
+        matchStage.price.$gte = parseFloat(minPrice);
+      }
+      if (maxPrice !== undefined && !isNaN(parseFloat(maxPrice))) {
+        matchStage.price.$lte = parseFloat(maxPrice);
+      }
     }
 
     let sortOption = { createdAt: -1 }; // default: ən yenilər
@@ -265,7 +276,7 @@ export const getExploreVideos = async (req, res) => {
       { $sort: sortOption },
       { $skip: skip },
       { $limit: limit },
-      // Provider məlumatları — fullName, companyName, phone
+      // Provider məlumatları — fullName, companyName, phone, address
       {
         $lookup: {
           from: "users",
@@ -276,6 +287,16 @@ export const getExploreVideos = async (req, res) => {
       },
       { $unwind: "$provider" },
     ];
+
+    // Location filteri — provider-in address-inə görə filtrləyirik
+    if (location) {
+      const safeLocation = String(location).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const locationRegex = new RegExp(safeLocation, "i");
+      pipeline.push({
+        $match: { "provider.providerProfile.address": locationRegex },
+      });
+    }
+
 
     // Login olmuş istifadəçi üçün isLiked / isSaved əlavə et
     if (userId) {

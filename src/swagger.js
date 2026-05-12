@@ -427,9 +427,12 @@ export default {
         "parameters": [
           { "in": "query", "name": "page", "schema": { "type": "integer", "default": 1 }, "description": "Səhifə nömrəsi" },
           { "in": "query", "name": "limit", "schema": { "type": "integer", "default": 15 }, "description": "Hər səhifədəki video sayı" },
-          { "in": "query", "name": "categoryId", "schema": { "type": "string" }, "description": "Yalnız bu kateqoriya İD-dəki videolar" },
-          { "in": "query", "name": "search", "schema": { "type": "string" }, "description": "Başlıq və ya açıqlamaya əsasən axtarış" },
-          { "in": "query", "name": "sort", "schema": { "type": "string", "enum": ["newest", "trending", "price_low", "price_high"] }, "description": "Sıralama (default: newest)" }
+          { "in": "query", "name": "categoryId", "schema": { "type": "string" }, "description": "Yalnız bu kateqoriya ID-dəki videolar" },
+          { "in": "query", "name": "search", "schema": { "type": "string" }, "description": "Video başlığı və ya açıqlamasına görə axtarış" },
+          { "in": "query", "name": "sort", "schema": { "type": "string", "enum": ["newest", "trending", "price_low", "price_high"] }, "description": "Sıralama (default: newest)" },
+          { "in": "query", "name": "location", "schema": { "type": "string" }, "description": "Provider ünvanına görə filter (məs: 'Bakı', 'Sumqayıt')" },
+          { "in": "query", "name": "minPrice", "schema": { "type": "number" }, "description": "Minimum qiymət (məs: 10)" },
+          { "in": "query", "name": "maxPrice", "schema": { "type": "number" }, "description": "Maksimum qiymət (məs: 500)" }
         ],
         "responses": {
           "200": {
