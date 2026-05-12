@@ -1,6 +1,8 @@
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
+import compression from "compression";
+import rateLimit from "express-rate-limit";
 import "dotenv/config";
 import { connectDB } from "./config/db.js";
 import authRoutes from "./routes/auth.routes.js";
@@ -13,8 +15,10 @@ import swaggerDocument from "./swagger.js";
 
 const app = express();
 
+// ✅ GZIP Compression — JSON response-ları ~70% kiçildir
+app.use(compression());
+
 // Global Security Headers
-// Global Security Headers (Relaxed CSP for Swagger UI on Vercel)
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -28,8 +32,24 @@ app.use(
   })
 );
 
-// İcazə verilən Origin-lər (Frontend / Flutter) -> Production-da * əvəzinə URL qoyulmalıdır
-app.use(cors());
+// ✅ Global Rate Limiter — Bütün API-ləri bot/DDoS hücumlarından qoruyur
+const globalLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 dəqiqə
+  max: 200,                  // IP-ə 200 sorğu/dəqiqə
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Çox sorğu göndərdiniz. Bir az gözləyin." },
+});
+app.use("/api", globalLimiter);
+
+// CORS — Production-da öz domenini yaz
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(",")
+    : "*",
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+}));
 
 app.use(express.json());
 
@@ -63,4 +83,4 @@ const PORT = process.env.PORT || 5000;
 connectDB().then(() => {
   app.listen(PORT, () => console.log(`🚀 Server: http://localhost:${PORT}`));
 });
- export default app;
+export default app;
