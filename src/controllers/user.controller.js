@@ -1,5 +1,6 @@
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
+import cloudinary from "../config/cloudinary.js";
 
 // Hemo (ümumi) yoxlama funksiyası - parolları yoxlayıb, heşləyir
 const checkAndHashPassword = async (password, confirmPassword) => {
@@ -196,6 +197,75 @@ export const redirectToWhatsapp = async (req, res) => {
     return res.redirect(whatsappUrl);
   } catch (err) {
     console.error("redirectToWhatsapp error:", err);
+    return res.status(500).json({ message: "Server xətası baş verdi." });
+  }
+};
+
+// ============================================================
+// PUT /api/users/profile-image
+// Profil şəklini yüklə / dəyişdir (User + Provider)
+// ============================================================
+export const uploadProfileImage = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: "MISSING_FILE", message: "Şəkil faylı tələb olunur." });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: "İstifadəçi tapılmadı." });
+    }
+
+    // Əvvəlki şəkli Cloudinary-dən sil (əgər varsa)
+    if (user.profileImagePublicId) {
+      await cloudinary.uploader.destroy(user.profileImagePublicId, { resource_type: "image" });
+    }
+
+    // Yeni şəkli yaz
+    user.profileImage = req.file.path;
+    user.profileImagePublicId = req.file.filename;
+    await user.save();
+
+    return res.json({
+      success: true,
+      message: "Profil şəkli uğurla yükləndi.",
+      profileImage: user.profileImage,
+    });
+  } catch (err) {
+    console.error("uploadProfileImage error:", err);
+    return res.status(500).json({ message: "Server xətası baş verdi." });
+  }
+};
+
+// ============================================================
+// DELETE /api/users/profile-image
+// Profil şəklini sil (User + Provider)
+// ============================================================
+export const deleteProfileImage = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ message: "İstifadəçi tapılmadı." });
+    }
+
+    if (!user.profileImagePublicId) {
+      return res.status(400).json({ message: "Profil şəkli mövcud deyil." });
+    }
+
+    // Cloudinary-dən sil
+    await cloudinary.uploader.destroy(user.profileImagePublicId, { resource_type: "image" });
+
+    // DB-dən təmizlə
+    user.profileImage = null;
+    user.profileImagePublicId = null;
+    await user.save();
+
+    return res.json({
+      success: true,
+      message: "Profil şəkli silindi.",
+    });
+  } catch (err) {
+    console.error("deleteProfileImage error:", err);
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };

@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import Otp from "../models/Otp.js";
+import Category from "../models/Category.js";
 import { sendEmailOtp } from "../utils/email.js";
 import { signAccessToken } from "../utils/jwt.js";
 
@@ -89,16 +90,22 @@ export async function registerUser(req, res) {
 
 /* ---------------- REGISTER (PROVIDER) + OTP ---------------- */
 
-const providerRegisterSchema = z.object({
-  fullName: z.string().min(2),
-  companyName: z.string().min(2),
-  phone: z.string().min(7),
-  email: z.string().email(),
-  password: z.string().min(6),
-  primaryServices: z.array(z.string().min(1)).min(1),
-  location: z.string().min(2),
-  about: z.string().min(10),
-});
+const providerRegisterSchema = z
+  .object({
+    firstName:       z.string().min(2),
+    lastName:        z.string().min(2),
+    companyName:     z.string().min(2),
+    email:           z.string().email(),
+    phone:           z.string().min(7),
+    categoryId:      z.string().min(1),
+    address:         z.string().min(2),
+    password:        z.string().min(6),
+    confirmPassword: z.string().min(6),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: "Şifrələr uyğun gəlmir",
+    path: ["confirmPassword"],
+  });
 
 export async function registerProvider(req, res) {
   try {
@@ -108,9 +115,11 @@ export async function registerProvider(req, res) {
         .status(400)
         .json({ error: "Validation error", details: parsed.error.issues });
 
+    const { firstName, lastName, companyName, categoryId, address, password } = parsed.data;
     const email = normalizeEmail(parsed.data.email);
     const phone = normalizePhone(parsed.data.phone);
-    const hashedPassword = await bcrypt.hash(parsed.data.password, 10);
+    const fullName = `${firstName.trim()} ${lastName.trim()}`;
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     const exists = await User.findOne({ $or: [{ email }, { phone }] });
     if (exists)
@@ -118,18 +127,24 @@ export async function registerProvider(req, res) {
         .status(409)
         .json({ error: "Bu email və ya phone artıq qeydiyyatdadır" });
 
+    // categoryId-nin həqiqətən mövcud və aktiv olduğunu yoxla
+    const category = await Category.findOne({ _id: categoryId, status: "active" });
+    if (!category)
+      return res
+        .status(400)
+        .json({ error: "Seçilmiş kateqoriya mövcud deyil və ya aktiv deyil" });
+
     await User.create({
       role: "provider",
-      fullName: parsed.data.fullName.trim(),
+      fullName,
       email,
       phone,
       password: hashedPassword,
       providerProfile: {
-        companyName: parsed.data.companyName.trim(),
-        primaryServices: parsed.data.primaryServices.map((s) => s.trim()),
-        location: parsed.data.location.trim(),
-        about: parsed.data.about.trim(),
-        verified: false,
+        companyName: companyName.trim(),
+        categoryId:  categoryId.trim(),
+        address:     address.trim(),
+        verified:    false,
       },
       emailVerified: false,
     });

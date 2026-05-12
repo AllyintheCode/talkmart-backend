@@ -2,11 +2,10 @@ import mongoose from "mongoose";
 
 const ProviderProfileSchema = new mongoose.Schema(
   {
-    companyName: { type: String, trim: true },
-    primaryServices: [{ type: String, trim: true }],
-    location: { type: String, trim: true },
-    about: { type: String, trim: true },
-    verified: { type: Boolean, default: false },
+    companyName:      { type: String, trim: true },
+    categoryId:       { type: String, trim: true },   // Seçilmiş kateqoriya ID-si
+    address:          { type: String, trim: true },   // İstifadəçinin ənvanı
+    verified:         { type: Boolean, default: false },
   },
   { _id: false },
 );
@@ -31,6 +30,10 @@ const UserSchema = new mongoose.Schema(
 
     // user-də null, provider-də object
     providerProfile: { type: ProviderProfileSchema, default: null },
+
+    // Profil şəkli (Cloudinary URL)
+    profileImage: { type: String, default: null },
+    profileImagePublicId: { type: String, default: null },
 
     // qeydiyyat OTP-si təsdiqlənibmi?
     emailVerified: { type: Boolean, default: false },

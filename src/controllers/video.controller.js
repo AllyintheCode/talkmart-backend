@@ -1,5 +1,10 @@
+import mongoose from "mongoose";
 import Video from "../models/Video.js";
 import cloudinary from "../config/cloudinary.js";
+import {
+  VideoLike,
+  VideoSave,
+} from "../models/VideoInteraction.js";
 
 // POST /api/videos/upload
 export const createVideo = async (req, res) => {
@@ -118,15 +123,16 @@ export const deleteVideo = async (req, res) => {
 
 // GET /api/videos/feed
 // Home (Reels) Məntiqi: Formatlandıırılmış təsadüfi axın (Yalnız status="active")
+// BİRLƏŞDİRİLMİŞ API: provider phone, likeCount, saveCount, isLiked, isSaved hamısı bir response-da
 export const getFeedVideos = async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
-    
-    // Yalnız aktiv videoları təsadüfi $sample ilə seçirik. 
-    // Hər pagedə TikTok tərzi fərqli videolar göndərir.
-    const videos = await Video.aggregate([
+    const userId = req.user?._id || null;
+
+    const pipeline = [
       { $match: { status: "active" } },
       { $sample: { size: limit } },
+      // Provider məlumatları — fullName, companyName, phone
       {
         $lookup: {
           from: "users",
@@ -136,25 +142,85 @@ export const getFeedVideos = async (req, res) => {
         },
       },
       { $unwind: "$provider" },
-      {
-        $project: {
-          _id: 1,
-          title: 1,
-          description: 1,
-          price: 1,
-          videoUrl: 1,
-          thumbnail: 1,
-          categoryId: 1,
-          likeCount: 1,
-          viewCount: 1,
-          saveCount: 1,
-          createdAt: 1,
-          providerId: "$provider._id",
-          "provider.fullName": "$provider.fullName",
-          "provider.companyName": "$provider.providerProfile.companyName",
+    ];
+
+    // Login olmuş istifadəçi üçün isLiked / isSaved əlavə et
+    if (userId) {
+      pipeline.push(
+        // Like yoxla
+        {
+          $lookup: {
+            from: "videolikes",
+            let: { vid: "$_id" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ["$videoId", "$$vid"] },
+                      { $eq: ["$userId", new mongoose.Types.ObjectId(userId)] },
+                    ],
+                  },
+                },
+              },
+              { $limit: 1 },
+            ],
+            as: "userLike",
+          },
         },
+        // Save yoxla
+        {
+          $lookup: {
+            from: "videosaves",
+            let: { vid: "$_id" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ["$videoId", "$$vid"] },
+                      { $eq: ["$userId", new mongoose.Types.ObjectId(userId)] },
+                    ],
+                  },
+                },
+              },
+              { $limit: 1 },
+            ],
+            as: "userSave",
+          },
+        }
+      );
+    }
+
+    // Final projection
+    pipeline.push({
+      $project: {
+        _id: 1,
+        title: 1,
+        description: 1,
+        price: 1,
+        videoUrl: 1,
+        thumbnail: 1,
+        categoryId: 1,
+        duration: 1,
+        likeCount: 1,
+        viewCount: 1,
+        saveCount: 1,
+        createdAt: 1,
+        providerId: "$provider._id",
+        "provider.fullName": "$provider.fullName",
+        "provider.companyName": "$provider.providerProfile.companyName",
+        "provider.phone": "$provider.phone",
+        isLiked: userId
+          ? { $gt: [{ $size: "$userLike" }, 0] }
+          : { $literal: false },
+        isSaved: userId
+          ? { $gt: [{ $size: "$userSave" }, 0] }
+          : { $literal: false },
       },
-    ]);
+    });
+
+    const videos = await Video.aggregate(pipeline);
 
     return res.status(200).json({ success: true, count: videos.length, videos });
   } catch (err) {
@@ -165,26 +231,28 @@ export const getFeedVideos = async (req, res) => {
 
 // GET /api/videos/explore
 // Explore (Axtarış / Filtrləmə) Məntiqi: Səhifələmə (Pagination), Kateqoriya filteri
+// BİRLƏŞDİRİLMİŞ API: provider phone, isLiked, isSaved hamısı bir response-da
 export const getExploreVideos = async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 15;
     const skip = (page - 1) * limit;
+    const userId = req.user?._id || null;
 
     const { categoryId, search, sort } = req.query;
 
-    const query = { status: "active" };
+    const matchStage = { status: "active" };
 
     if (categoryId) {
       // NoSQL injection qorunması: type-ı məcburi string edirik
-      query.categoryId = String(categoryId);
+      matchStage.categoryId = new mongoose.Types.ObjectId(String(categoryId));
     }
 
     if (search) {
       // ReDoS (Regex Denial of Service) hücumlarının qarşısını almaq üçün xüsusi simvolları təmizləyirik
       const safeSearch = String(search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const searchRegex = new RegExp(safeSearch, "i");
-      query.$or = [{ title: searchRegex }, { description: searchRegex }];
+      matchStage.$or = [{ title: searchRegex }, { description: searchRegex }];
     }
 
     let sortOption = { createdAt: -1 }; // default: ən yenilər
@@ -192,14 +260,102 @@ export const getExploreVideos = async (req, res) => {
     else if (sort === "price_low") sortOption = { price: 1 };
     else if (sort === "price_high") sortOption = { price: -1 };
 
-    const videos = await Video.find(query)
-      .sort(sortOption)
-      .skip(skip)
-      .limit(limit)
-      .populate("providerId", "fullName providerProfile.companyName") 
-      .select("-publicId");
+    const pipeline = [
+      { $match: matchStage },
+      { $sort: sortOption },
+      { $skip: skip },
+      { $limit: limit },
+      // Provider məlumatları — fullName, companyName, phone
+      {
+        $lookup: {
+          from: "users",
+          localField: "providerId",
+          foreignField: "_id",
+          as: "provider",
+        },
+      },
+      { $unwind: "$provider" },
+    ];
 
-    const total = await Video.countDocuments(query);
+    // Login olmuş istifadəçi üçün isLiked / isSaved əlavə et
+    if (userId) {
+      pipeline.push(
+        {
+          $lookup: {
+            from: "videolikes",
+            let: { vid: "$_id" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ["$videoId", "$$vid"] },
+                      { $eq: ["$userId", new mongoose.Types.ObjectId(userId)] },
+                    ],
+                  },
+                },
+              },
+              { $limit: 1 },
+            ],
+            as: "userLike",
+          },
+        },
+        {
+          $lookup: {
+            from: "videosaves",
+            let: { vid: "$_id" },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ["$videoId", "$$vid"] },
+                      { $eq: ["$userId", new mongoose.Types.ObjectId(userId)] },
+                    ],
+                  },
+                },
+              },
+              { $limit: 1 },
+            ],
+            as: "userSave",
+          },
+        }
+      );
+    }
+
+    // Final projection — publicId göndərmirik
+    pipeline.push({
+      $project: {
+        _id: 1,
+        title: 1,
+        description: 1,
+        price: 1,
+        videoUrl: 1,
+        thumbnail: 1,
+        categoryId: 1,
+        duration: 1,
+        likeCount: 1,
+        viewCount: 1,
+        saveCount: 1,
+        createdAt: 1,
+        providerId: "$provider._id",
+        "provider.fullName": "$provider.fullName",
+        "provider.companyName": "$provider.providerProfile.companyName",
+        "provider.phone": "$provider.phone",
+        isLiked: userId
+          ? { $gt: [{ $size: "$userLike" }, 0] }
+          : { $literal: false },
+        isSaved: userId
+          ? { $gt: [{ $size: "$userSave" }, 0] }
+          : { $literal: false },
+        publicId: 0,
+      },
+    });
+
+    const [videos, total] = await Promise.all([
+      Video.aggregate(pipeline),
+      Video.countDocuments(matchStage),
+    ]);
 
     return res.status(200).json({
       success: true,

@@ -269,7 +269,7 @@ export const getEngagement = async (req, res) => {
       });
     }
 
-    // ====== LOGIN OLMUŞ İSTIFADƎÇİ ======
+    // ====== LOGIN OLMUŞ İSTIFADƏÇİ ======
     const userId = req.user._id;
     const [liked, saved] = await Promise.all([
       VideoLike.exists({ videoId, userId }),
@@ -290,3 +290,202 @@ export const getEngagement = async (req, res) => {
     return res.status(500).json({ message: "Server xətası." });
   }
 };
+
+// ==================== LIKED VIDEOS ====================
+
+// GET /api/videos/liked  →  istifadəçinin bəyəndiyi videolar
+export const getLikedVideos = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 15;
+    const skip = (page - 1) * limit;
+
+    const total = await VideoLike.countDocuments({ userId });
+
+    const likedVideos = await VideoLike.aggregate([
+      { $match: { userId: new mongoose.Types.ObjectId(userId) } },
+      { $sort: { createdAt: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+      // Video məlumatlarını gətir
+      {
+        $lookup: {
+          from: "videos",
+          localField: "videoId",
+          foreignField: "_id",
+          as: "video",
+        },
+      },
+      { $unwind: "$video" },
+      // Yalnız aktiv videoları göstər
+      { $match: { "video.status": "active" } },
+      // Provider məlumatlarını gətir
+      {
+        $lookup: {
+          from: "users",
+          localField: "video.providerId",
+          foreignField: "_id",
+          as: "provider",
+        },
+      },
+      { $unwind: "$provider" },
+      // Save yoxla
+      {
+        $lookup: {
+          from: "videosaves",
+          let: { vid: "$video._id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$videoId", "$$vid"] },
+                    { $eq: ["$userId", new mongoose.Types.ObjectId(userId)] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+          ],
+          as: "userSave",
+        },
+      },
+      {
+        $project: {
+          _id: "$video._id",
+          title: "$video.title",
+          description: "$video.description",
+          price: "$video.price",
+          videoUrl: "$video.videoUrl",
+          thumbnail: "$video.thumbnail",
+          categoryId: "$video.categoryId",
+          duration: "$video.duration",
+          likeCount: "$video.likeCount",
+          viewCount: "$video.viewCount",
+          saveCount: "$video.saveCount",
+          createdAt: "$video.createdAt",
+          providerId: "$provider._id",
+          "provider.fullName": "$provider.fullName",
+          "provider.companyName": "$provider.providerProfile.companyName",
+          "provider.phone": "$provider.phone",
+          isLiked: { $literal: true },
+          isSaved: { $gt: [{ $size: "$userSave" }, 0] },
+          likedAt: "$createdAt",
+        },
+      },
+    ]);
+
+    return res.json({
+      success: true,
+      count: likedVideos.length,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+      videos: likedVideos,
+    });
+  } catch (err) {
+    console.error("getLikedVideos error:", err);
+    return res.status(500).json({ message: "Server xətası." });
+  }
+};
+
+// ==================== SAVED VIDEOS ====================
+
+// GET /api/videos/saved  →  istifadəçinin yadda saxladığı videolar
+export const getSavedVideos = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 15;
+    const skip = (page - 1) * limit;
+
+    const total = await VideoSave.countDocuments({ userId });
+
+    const savedVideos = await VideoSave.aggregate([
+      { $match: { userId: new mongoose.Types.ObjectId(userId) } },
+      { $sort: { createdAt: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+      // Video məlumatlarını gətir
+      {
+        $lookup: {
+          from: "videos",
+          localField: "videoId",
+          foreignField: "_id",
+          as: "video",
+        },
+      },
+      { $unwind: "$video" },
+      // Yalnız aktiv videoları göstər
+      { $match: { "video.status": "active" } },
+      // Provider məlumatlarını gətir
+      {
+        $lookup: {
+          from: "users",
+          localField: "video.providerId",
+          foreignField: "_id",
+          as: "provider",
+        },
+      },
+      { $unwind: "$provider" },
+      // Like yoxla
+      {
+        $lookup: {
+          from: "videolikes",
+          let: { vid: "$video._id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$videoId", "$$vid"] },
+                    { $eq: ["$userId", new mongoose.Types.ObjectId(userId)] },
+                  ],
+                },
+              },
+            },
+            { $limit: 1 },
+          ],
+          as: "userLike",
+        },
+      },
+      {
+        $project: {
+          _id: "$video._id",
+          title: "$video.title",
+          description: "$video.description",
+          price: "$video.price",
+          videoUrl: "$video.videoUrl",
+          thumbnail: "$video.thumbnail",
+          categoryId: "$video.categoryId",
+          duration: "$video.duration",
+          likeCount: "$video.likeCount",
+          viewCount: "$video.viewCount",
+          saveCount: "$video.saveCount",
+          createdAt: "$video.createdAt",
+          providerId: "$provider._id",
+          "provider.fullName": "$provider.fullName",
+          "provider.companyName": "$provider.providerProfile.companyName",
+          "provider.phone": "$provider.phone",
+          isLiked: { $gt: [{ $size: "$userLike" }, 0] },
+          isSaved: { $literal: true },
+          savedAt: "$createdAt",
+        },
+      },
+    ]);
+
+    return res.json({
+      success: true,
+      count: savedVideos.length,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+      videos: savedVideos,
+    });
+  } catch (err) {
+    console.error("getSavedVideos error:", err);
+    return res.status(500).json({ message: "Server xətası." });
+  }
+};
+

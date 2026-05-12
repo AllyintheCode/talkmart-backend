@@ -70,20 +70,17 @@ export default {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["fullName", "companyName", "phone", "email", "password", "primaryServices", "location", "about"],
+                "required": ["firstName", "lastName", "companyName", "email", "phone", "categoryId", "address", "password", "confirmPassword"],
                 "properties": {
-                  "fullName": { "type": "string", "example": "Cəmilə Məmmədova" },
-                  "companyName": { "type": "string", "example": "Cəmilə Təmizlik" },
-                  "phone": { "type": "string", "example": "+994501234567" },
-                  "email": { "type": "string", "format": "email", "example": "cemile@example.com" },
-                  "password": { "type": "string", "format": "password", "example": "sirr123" },
-                  "primaryServices": {
-                    "type": "array",
-                    "items": { "type": "string" },
-                    "example": ["Təmizlik", "Santexnika"]
-                  },
-                  "location": { "type": "string", "example": "Bakı, Azərbaycan" },
-                  "about": { "type": "string", "example": "Şəhərdə ən yaxşı təmizlik xidmətlərini təklif edirik." }
+                  "firstName":       { "type": "string", "example": "Cəmilə" },
+                  "lastName":        { "type": "string", "example": "Məmmədova" },
+                  "companyName":     { "type": "string", "example": "Cəmilə Təmizlik" },
+                  "email":           { "type": "string", "format": "email", "example": "cemile@example.com" },
+                  "phone":           { "type": "string", "example": "+994501234567" },
+                  "categoryId":      { "type": "string", "example": "64efc9abc1234567890abc01", "description": "Seçilmiş xidmət kateqoriyasının ObjectId-si" },
+                  "address":         { "type": "string", "example": "Neftчilər pr, 12, Bakı" },
+                  "password":        { "type": "string", "format": "password", "example": "sirr123" },
+                  "confirmPassword": { "type": "string", "format": "password", "example": "sirr123" }
                 }
               }
             }
@@ -91,7 +88,7 @@ export default {
         },
         "responses": {
           "201": { "description": "Qeydiyyat tamamlandı, e-poçta OTP göndərildi." },
-          "400": { "description": "Validasiya xətası" },
+          "400": { "description": "Validasiya xətası (məs. şifrələr uyğun gəlmir)" },
           "409": { "description": "E-poçt və ya telefon artıq qeydiyyatdan keçib" }
         }
       }
@@ -297,35 +294,321 @@ export default {
         }
       }
     },
+    "/users/profile-image": {
+      "put": {
+        "summary": "Profil şəklini yüklə / dəyişdir",
+        "description": "🔐 **LOGIN TƏLƏB OLUNUR** — Həm User, həm Provider istifadə edə bilər. Əvvəlki şəkil avtomatik Cloudinary-dən silinir.",
+        "tags": ["User"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["image"],
+                "properties": {
+                  "image": { "type": "string", "format": "binary", "description": "Profil şəkli (jpg, png, webp, gif). Maksimum 10MB." }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Profil şəkli uğurla yükləndi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Profil şəkli uğurla yükləndi." },
+                    "profileImage": { "type": "string", "example": "https://res.cloudinary.com/.../profile.jpg" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Şəkil faylı əskikdir" },
+          "401": { "description": "Login tələb olunur" }
+        }
+      },
+      "delete": {
+        "summary": "Profil şəklini sil",
+        "description": "🔐 **LOGIN TƏLƏB OLUNUR** — Həm User, həm Provider istifadə edə bilər. Cloudinary-dən silinir və DB-dən təmizlənir.",
+        "tags": ["User"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Profil şəkli silindi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Profil şəkli silindi." }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "description": "Profil şəkli mövcud deyil" },
+          "401": { "description": "Login tələb olunur" }
+        }
+      }
+    },
     "/videos/feed": {
       "get": {
         "summary": "Ana Səhifə (Reels) üçün sonsuz təsadüfi/trend videolar (TikTok tərzi)",
-        "description": "🔓 **GUEST DOSTu** — Token olmadan da işləyir. Login olmamış istifadəçilər videoları sərbəst izləyə bilər.",
+        "description": "🔓 **GUEST DOSTu** — Token olmadan da işləyir. Login olmamış istifadəçilər videoları sərbəst izləyə bilər.\n\n📦 **BİRLƏŞDİRİLMİŞ API** — Hər video ilə birlikdə provider telefon nömrəsi, likeCount, saveCount, viewCount, isLiked, isSaved hamısı bir response-da qaytarılır. Ayrıca `/engagement` və ya `/contact` çağırmağa ehtiyac yoxdur.",
         "tags": ["Video"],
         "security": [],
         "parameters": [
-          { "in": "query", "name": "limit", "schema": { "type": "integer", "default": 10 } }
+          { "in": "query", "name": "limit", "schema": { "type": "integer", "default": 10 }, "description": "Qaytarılacaq video sayı" }
         ],
         "responses": {
-          "200": { "description": "Təsadüfi seçilmiş (yalnız aktiv) videolar axını" }
+          "200": {
+            "description": "Təsadüfi seçilmiş (yalnız aktiv) videolar axını — provider məlumatları və engagement statusu daxildir",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "count": { "type": "integer", "example": 10 },
+                    "videos": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "_id": { "type": "string", "example": "64efc9abc1234567890def12" },
+                          "title": { "type": "string", "example": "Peşəkar Santexnika Xidməti" },
+                          "description": { "type": "string", "example": "Boru təmiri və su xətləri." },
+                          "price": { "type": "number", "example": 50.5 },
+                          "videoUrl": { "type": "string", "example": "https://res.cloudinary.com/.../video.mp4" },
+                          "thumbnail": { "type": "string", "example": "https://res.cloudinary.com/.../thumb.jpg" },
+                          "categoryId": { "type": "string", "example": "64efc9abc1234567890abc01" },
+                          "duration": { "type": "number", "example": 30 },
+                          "likeCount": { "type": "integer", "example": 42 },
+                          "viewCount": { "type": "integer", "example": 128 },
+                          "saveCount": { "type": "integer", "example": 15 },
+                          "createdAt": { "type": "string", "format": "date-time" },
+                          "providerId": { "type": "string", "example": "64efc9abc1234567890def99" },
+                          "provider": {
+                            "type": "object",
+                            "properties": {
+                              "fullName": { "type": "string", "example": "Cəmilə Məmmədova" },
+                              "companyName": { "type": "string", "example": "Cəmilə Təmizlik", "nullable": true },
+                              "phone": { "type": "string", "example": "+994501234567", "description": "Providerin əlaqə nömrəsi" }
+                            }
+                          },
+                          "isLiked": { "type": "boolean", "description": "Cari istifadəçi bu videonu bəyənibmi. Guest üçün həmişə false.", "example": true },
+                          "isSaved": { "type": "boolean", "description": "Cari istifadəçi bu videonu yadda saxlayıbmı. Guest üçün həmişə false.", "example": false }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "description": "Server xətası" }
         }
       }
     },
     "/videos/explore": {
       "get": {
         "summary": "Kəşf Et (Explore) səhifəsi üçün kateqoriyalı və axtarışlı list",
-        "description": "🔓 **GUEST DOSTu** — Token olmadan da işləyir. Login olmamış istifadəçilər sərbəst axtarış edə bilər.",
+        "description": "🔓 **GUEST DOSTu** — Token olmadan da işləyir. Login olmamış istifadəçilər sərbəst axtarış edə bilər.\n\n📦 **BİRLƏŞDİRİLMİŞ API** — Hər video ilə birlikdə provider telefon nömrəsi, likeCount, saveCount, viewCount, isLiked, isSaved hamısı bir response-da qaytarılır. Ayrıca `/engagement` və ya `/contact` çağırmağa ehtiyac yoxdur.",
         "tags": ["Video"],
         "security": [],
         "parameters": [
-          { "in": "query", "name": "page", "schema": { "type": "integer", "default": 1 } },
-          { "in": "query", "name": "limit", "schema": { "type": "integer", "default": 15 } },
+          { "in": "query", "name": "page", "schema": { "type": "integer", "default": 1 }, "description": "Səhifə nömrəsi" },
+          { "in": "query", "name": "limit", "schema": { "type": "integer", "default": 15 }, "description": "Hər səhifədəki video sayı" },
           { "in": "query", "name": "categoryId", "schema": { "type": "string" }, "description": "Yalnız bu kateqoriya İD-dəki videolar" },
           { "in": "query", "name": "search", "schema": { "type": "string" }, "description": "Başlıq və ya açıqlamaya əsasən axtarış" },
           { "in": "query", "name": "sort", "schema": { "type": "string", "enum": ["newest", "trending", "price_low", "price_high"] }, "description": "Sıralama (default: newest)" }
         ],
         "responses": {
-          "200": { "description": "Səhifələnmiş, filterlənmiş videolar siyahısı (Explore grid)" }
+          "200": {
+            "description": "Səhifələnmiş, filterlənmiş videolar siyahısı — provider məlumatları və engagement statusu daxildir",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "count": { "type": "integer", "description": "Bu səhifədəki video sayı", "example": 15 },
+                    "total": { "type": "integer", "description": "Ümumi uyğun video sayı", "example": 87 },
+                    "page": { "type": "integer", "example": 1 },
+                    "totalPages": { "type": "integer", "example": 6 },
+                    "videos": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "_id": { "type": "string", "example": "64efc9abc1234567890def12" },
+                          "title": { "type": "string", "example": "Peşəkar Santexnika Xidməti" },
+                          "description": { "type": "string", "example": "Boru təmiri və su xətləri." },
+                          "price": { "type": "number", "example": 50.5 },
+                          "videoUrl": { "type": "string", "example": "https://res.cloudinary.com/.../video.mp4" },
+                          "thumbnail": { "type": "string", "example": "https://res.cloudinary.com/.../thumb.jpg" },
+                          "categoryId": { "type": "string", "example": "64efc9abc1234567890abc01" },
+                          "duration": { "type": "number", "example": 30 },
+                          "likeCount": { "type": "integer", "example": 42 },
+                          "viewCount": { "type": "integer", "example": 128 },
+                          "saveCount": { "type": "integer", "example": 15 },
+                          "createdAt": { "type": "string", "format": "date-time" },
+                          "providerId": { "type": "string", "example": "64efc9abc1234567890def99" },
+                          "provider": {
+                            "type": "object",
+                            "properties": {
+                              "fullName": { "type": "string", "example": "Cəmilə Məmmədova" },
+                              "companyName": { "type": "string", "example": "Cəmilə Təmizlik", "nullable": true },
+                              "phone": { "type": "string", "example": "+994501234567", "description": "Providerin əlaqə nömrəsi" }
+                            }
+                          },
+                          "isLiked": { "type": "boolean", "description": "Cari istifadəçi bu videonu bəyənibmi. Guest üçün həmişə false.", "example": true },
+                          "isSaved": { "type": "boolean", "description": "Cari istifadəçi bu videonu yadda saxlayıbmı. Guest üçün həmişə false.", "example": false }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "description": "Server xətası" }
+        }
+      }
+    },
+    "/videos/liked": {
+      "get": {
+        "summary": "İstifadəçinin bəyəndiyi videoları gətir",
+        "description": "🔐 **LOGIN TƏLƏB OLUNUR** — Cari istifadəçinin like etdiyi bütün videoları səhifələnmiş formada qaytarır. Hər video ilə birlikdə provider phone, isLiked, isSaved daxildir.",
+        "tags": ["Engagement"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "query", "name": "page", "schema": { "type": "integer", "default": 1 } },
+          { "in": "query", "name": "limit", "schema": { "type": "integer", "default": 15 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bəyənilmiş videoların siyahısı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "count": { "type": "integer", "example": 10 },
+                    "total": { "type": "integer", "example": 25 },
+                    "page": { "type": "integer", "example": 1 },
+                    "totalPages": { "type": "integer", "example": 2 },
+                    "videos": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "_id": { "type": "string" },
+                          "title": { "type": "string" },
+                          "description": { "type": "string" },
+                          "price": { "type": "number" },
+                          "videoUrl": { "type": "string" },
+                          "thumbnail": { "type": "string" },
+                          "categoryId": { "type": "string" },
+                          "duration": { "type": "number" },
+                          "likeCount": { "type": "integer" },
+                          "viewCount": { "type": "integer" },
+                          "saveCount": { "type": "integer" },
+                          "createdAt": { "type": "string", "format": "date-time" },
+                          "providerId": { "type": "string" },
+                          "provider": {
+                            "type": "object",
+                            "properties": {
+                              "fullName": { "type": "string" },
+                              "companyName": { "type": "string", "nullable": true },
+                              "phone": { "type": "string" }
+                            }
+                          },
+                          "isLiked": { "type": "boolean", "example": true },
+                          "isSaved": { "type": "boolean" },
+                          "likedAt": { "type": "string", "format": "date-time", "description": "Like edilmə tarixi" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Login tələb olunur" }
+        }
+      }
+    },
+    "/videos/saved": {
+      "get": {
+        "summary": "İstifadəçinin yadda saxladığı videoları gətir",
+        "description": "🔐 **LOGIN TƏLƏB OLUNUR** — Cari istifadəçinin save etdiyi bütün videoları səhifələnmiş formada qaytarır. Hər video ilə birlikdə provider phone, isLiked, isSaved daxildir.",
+        "tags": ["Engagement"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "in": "query", "name": "page", "schema": { "type": "integer", "default": 1 } },
+          { "in": "query", "name": "limit", "schema": { "type": "integer", "default": 15 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "Yadda saxlanmış videoların siyahısı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "count": { "type": "integer", "example": 5 },
+                    "total": { "type": "integer", "example": 12 },
+                    "page": { "type": "integer", "example": 1 },
+                    "totalPages": { "type": "integer", "example": 1 },
+                    "videos": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "_id": { "type": "string" },
+                          "title": { "type": "string" },
+                          "description": { "type": "string" },
+                          "price": { "type": "number" },
+                          "videoUrl": { "type": "string" },
+                          "thumbnail": { "type": "string" },
+                          "categoryId": { "type": "string" },
+                          "duration": { "type": "number" },
+                          "likeCount": { "type": "integer" },
+                          "viewCount": { "type": "integer" },
+                          "saveCount": { "type": "integer" },
+                          "createdAt": { "type": "string", "format": "date-time" },
+                          "providerId": { "type": "string" },
+                          "provider": {
+                            "type": "object",
+                            "properties": {
+                              "fullName": { "type": "string" },
+                              "companyName": { "type": "string", "nullable": true },
+                              "phone": { "type": "string" }
+                            }
+                          },
+                          "isLiked": { "type": "boolean" },
+                          "isSaved": { "type": "boolean", "example": true },
+                          "savedAt": { "type": "string", "format": "date-time", "description": "Yadda saxlanma tarixi" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Login tələb olunur" }
         }
       }
     },

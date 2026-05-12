@@ -11,6 +11,8 @@ import {
   toggleSave,
   recordView,
   getEngagement,
+  getLikedVideos,
+  getSavedVideos,
 } from "../controllers/engagement.controller.js";
 import { verifyToken, providerOnly, requireAuth, optionalAuth } from "../middlewares/auth.middleware.js";
 import { uploadVideo } from "../middlewares/upload.middleware.js";
@@ -24,6 +26,12 @@ const router = Router();
 // ============================
 router.get("/feed", optionalAuth, getFeedVideos);
 router.get("/explore", optionalAuth, getExploreVideos);
+
+// ============================
+// Liked / Saved videolar — LOGIN TƏLƏB OLUNUR
+// ============================
+router.get("/liked", requireAuth, getLikedVideos);
+router.get("/saved", requireAuth, getSavedVideos);
 
 // ============================
 // Engagement — Görüntülənmə (guest + login)

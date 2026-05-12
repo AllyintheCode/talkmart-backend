@@ -1,6 +1,7 @@
 import { Router } from "express";
-import { updateUser, updateProvider, getProviderContact } from "../controllers/user.controller.js";
+import { updateUser, updateProvider, getProviderContact, uploadProfileImage, deleteProfileImage } from "../controllers/user.controller.js";
 import { requireAuth, providerOnly, optionalAuth } from "../middlewares/auth.middleware.js";
+import { uploadImage } from "../middlewares/upload.middleware.js";
 
 const router = Router();
 
@@ -15,6 +16,12 @@ router.put("/user", requireAuth, updateUser);
 // requireAuth: guest → LOGIN_REQUIRED
 // ============================================================
 router.put("/provider", requireAuth, providerOnly, updateProvider);
+
+// ============================================================
+// Profil şəkli — User + Provider hər ikisi üçün
+// ============================================================
+router.put("/profile-image", requireAuth, uploadImage.single("image"), uploadProfileImage);
+router.delete("/profile-image", requireAuth, deleteProfileImage);
 
 // ============================================================
 // GET /api/users/provider/:id/contact → Providerin əlaqə məlumatı
