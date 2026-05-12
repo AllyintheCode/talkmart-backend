@@ -76,4 +76,26 @@ const VideoSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// =============================================
+// PERFORMANCE İNDEKSLƏRİ
+// =============================================
+
+// Feed: aktiv videolar → ən yeni (status + createdAt)
+VideoSchema.index({ status: 1, createdAt: -1 });
+
+// Explore: kateqoriya + status + tarix filteri
+VideoSchema.index({ status: 1, categoryId: 1, createdAt: -1 });
+
+// Qiymət aralığı filteri (minPrice/maxPrice)
+VideoSchema.index({ status: 1, price: 1 });
+
+// Trending sıralama
+VideoSchema.index({ status: 1, viewCount: -1, likeCount: -1 });
+
+// Provider-in öz videoları
+VideoSchema.index({ providerId: 1, createdAt: -1 });
+
+// Ad/açıqlama üzrə text axtarışı
+VideoSchema.index({ title: "text", description: "text" });
+
 export default mongoose.models.Video || mongoose.model("Video", VideoSchema);
