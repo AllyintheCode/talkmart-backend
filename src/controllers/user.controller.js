@@ -114,6 +114,17 @@ export const updateProvider = async (req, res) => {
       if (location !== undefined) user.providerProfile.location = location;
     }
 
+    // Profil şəkli yenilənməsi (Əgər fayl göndərilibsə və ya JSON-da URL gəlibsə)
+    if (req.file) {
+      if (user.profileImagePublicId) {
+        await cloudinary.uploader.destroy(user.profileImagePublicId, { resource_type: "image" });
+      }
+      user.profileImage = req.file.path;
+      user.profileImagePublicId = req.file.filename;
+    } else if (req.body.profileImage !== undefined) {
+      user.profileImage = req.body.profileImage;
+    }
+
     await user.save();
 
     const updatedUser = user.toObject();
@@ -202,42 +213,6 @@ export const redirectToWhatsapp = async (req, res) => {
 };
 
 // ============================================================
-// PUT /api/users/profile-image
-// Profil şəklini yüklə / dəyişdir (User + Provider)
-// ============================================================
-export const uploadProfileImage = async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: "MISSING_FILE", message: "Şəkil faylı tələb olunur." });
-    }
-
-    const user = await User.findById(req.user._id);
-    if (!user) {
-      return res.status(404).json({ message: "İstifadəçi tapılmadı." });
-    }
-
-    // Əvvəlki şəkli Cloudinary-dən sil (əgər varsa)
-    if (user.profileImagePublicId) {
-      await cloudinary.uploader.destroy(user.profileImagePublicId, { resource_type: "image" });
-    }
-
-    // Yeni şəkli yaz
-    user.profileImage = req.file.path;
-    user.profileImagePublicId = req.file.filename;
-    await user.save();
-
-    return res.json({
-      success: true,
-      message: "Profil şəkli uğurla yükləndi.",
-      profileImage: user.profileImage,
-    });
-  } catch (err) {
-    console.error("uploadProfileImage error:", err);
-    return res.status(500).json({ message: "Server xətası baş verdi." });
-  }
-};
-
-// ============================================================
 // DELETE /api/users/profile-image
 // Profil şəklini sil (User + Provider)
 // ============================================================
@@ -269,3 +244,4 @@ export const deleteProfileImage = async (req, res) => {
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };
+

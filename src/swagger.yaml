@@ -314,6 +314,11 @@ paths:
                 location:
                   type: string
                   example: "Gəncə, Azərbaycan"
+                profileImage:
+                  type: string
+                  example: "https://res.cloudinary.com/.../profile.jpg"
+                  nullable: true
+                  description: "Profil şəkli URL-i"
       responses:
         '200':
           description: Provider profili uğurla yeniləndi.
@@ -328,48 +333,32 @@ paths:
         '409':
           description: E-poçt ünvanı artıq istifadədədir
 
-  # ==============================
-  #    PROFİL ŞƏKLİ
-  # ==============================
   /users/profile-image:
-    put:
-      summary: "Profil şəklini yüklə / dəyişdir"
-      description: "LOGIN TƏLƏB OLUNUR — User + Provider. Əvvəlki şəkil Cloudinary-dən silinir."
-      tags: [User]
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          multipart/form-data:
-            schema:
-              type: object
-              required: [image]
-              properties:
-                image:
-                  type: string
-                  format: binary
-                  description: "Profil şəkli (jpg, png, webp, gif). Max 10MB."
-      responses:
-        '200':
-          description: Profil şəkli yükləndi
-        '400':
-          description: Şəkil faylı əskikdir
-        '401':
-          description: Login tələb olunur
     delete:
       summary: "Profil şəklini sil"
-      description: "LOGIN TƏLƏB OLUNUR — Cloudinary-dən silinir, DB təmizlənir."
+      description: "🔐 **LOGIN TƏLƏB OLUNUR** — Həm User, həm Provider istifadə edə bilər. Cloudinary-dən silinir və DB-dən təmizlənir."
       tags: [User]
       security:
         - bearerAuth: []
       responses:
         '200':
           description: Profil şəkli silindi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Profil şəkli silindi."
         '400':
           description: Profil şəkli mövcud deyil
         '401':
           description: Login tələb olunur
+
 
   # ==============================
   #    VIDEO FEED / EXPLORE (BİRLƏŞDİRİLMİŞ API)
@@ -433,11 +422,12 @@ paths:
                         createdAt:
                           type: string
                           format: date-time
-                        providerId:
-                          type: string
                         provider:
                           type: object
                           properties:
+                            _id:
+                              type: string
+                              description: Providerin ID-si
                             fullName:
                               type: string
                             companyName:
@@ -446,6 +436,14 @@ paths:
                             phone:
                               type: string
                               description: Providerin əlaqə nömrəsi
+                            address:
+                              type: string
+                              nullable: true
+                              description: Providerin ünvanı
+                            profileImage:
+                              type: string
+                              nullable: true
+                              description: Providerin profil şəkli (Cloudinary URL)
                         isLiked:
                           type: boolean
                           description: "Guest üçün həmişə false"
@@ -552,11 +550,12 @@ paths:
                         createdAt:
                           type: string
                           format: date-time
-                        providerId:
-                          type: string
                         provider:
                           type: object
                           properties:
+                            _id:
+                              type: string
+                              description: Providerin ID-si
                             fullName:
                               type: string
                             companyName:
@@ -564,6 +563,15 @@ paths:
                               nullable: true
                             phone:
                               type: string
+                              description: Providerin əlaqə nömrəsi
+                            address:
+                              type: string
+                              nullable: true
+                              description: Providerin ünvanı
+                            profileImage:
+                              type: string
+                              nullable: true
+                              description: Providerin profil şəkli (Cloudinary URL)
                         isLiked:
                           type: boolean
                         isSaved:
@@ -591,9 +599,78 @@ paths:
           schema:
             type: integer
             default: 15
-      responses:
         '200':
           description: Bəyənilmiş videoların siyahısı
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  count:
+                    type: integer
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  totalPages:
+                    type: integer
+                  videos:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        _id:
+                          type: string
+                        title:
+                          type: string
+                        description:
+                          type: string
+                        price:
+                          type: number
+                        videoUrl:
+                          type: string
+                        thumbnail:
+                          type: string
+                        categoryId:
+                          type: string
+                        duration:
+                          type: number
+                        likeCount:
+                          type: integer
+                        viewCount:
+                          type: integer
+                        saveCount:
+                          type: integer
+                        createdAt:
+                          type: string
+                          format: date-time
+                        provider:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                            fullName:
+                              type: string
+                            companyName:
+                              type: string
+                              nullable: true
+                            phone:
+                              type: string
+                            address:
+                              type: string
+                              nullable: true
+                            profileImage:
+                              type: string
+                              nullable: true
+                        isLiked:
+                          type: boolean
+                        isSaved:
+                          type: boolean
+                        likedAt:
+                          type: string
+                          format: date-time
         '401':
           description: Login tələb olunur
 
@@ -615,9 +692,78 @@ paths:
           schema:
             type: integer
             default: 15
-      responses:
         '200':
           description: Yadda saxlanmış videoların siyahısı
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  count:
+                    type: integer
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+                  totalPages:
+                    type: integer
+                  videos:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        _id:
+                          type: string
+                        title:
+                          type: string
+                        description:
+                          type: string
+                        price:
+                          type: number
+                        videoUrl:
+                          type: string
+                        thumbnail:
+                          type: string
+                        categoryId:
+                          type: string
+                        duration:
+                          type: number
+                        likeCount:
+                          type: integer
+                        viewCount:
+                          type: integer
+                        saveCount:
+                          type: integer
+                        createdAt:
+                          type: string
+                          format: date-time
+                        provider:
+                          type: object
+                          properties:
+                            _id:
+                              type: string
+                            fullName:
+                              type: string
+                            companyName:
+                              type: string
+                              nullable: true
+                            phone:
+                              type: string
+                            address:
+                              type: string
+                              nullable: true
+                            profileImage:
+                              type: string
+                              nullable: true
+                        isLiked:
+                          type: boolean
+                        isSaved:
+                          type: boolean
+                        savedAt:
+                          type: string
+                          format: date-time
         '401':
           description: Login tələb olunur
 

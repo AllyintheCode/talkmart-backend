@@ -207,10 +207,14 @@ export const getFeedVideos = async (req, res) => {
         viewCount: 1,
         saveCount: 1,
         createdAt: 1,
-        providerId: "$provider._id",
-        "provider.fullName": "$provider.fullName",
-        "provider.companyName": "$provider.providerProfile.companyName",
-        "provider.phone": "$provider.phone",
+        provider: {
+          _id: "$provider._id",
+          fullName: "$provider.fullName",
+          companyName: "$provider.providerProfile.companyName",
+          phone: "$provider.phone",
+          address: "$provider.providerProfile.address",
+          profileImage: "$provider.profileImage",
+        },
         isLiked: userId
           ? { $gt: [{ $size: "$userLike" }, 0] }
           : { $literal: false },
@@ -359,17 +363,20 @@ export const getExploreVideos = async (req, res) => {
         viewCount: 1,
         saveCount: 1,
         createdAt: 1,
-        providerId: "$provider._id",
-        "provider.fullName": "$provider.fullName",
-        "provider.companyName": "$provider.providerProfile.companyName",
-        "provider.phone": "$provider.phone",
+        provider: {
+          _id: "$provider._id",
+          fullName: "$provider.fullName",
+          companyName: "$provider.providerProfile.companyName",
+          phone: "$provider.phone",
+          address: "$provider.providerProfile.address",
+          profileImage: "$provider.profileImage",
+        },
         isLiked: userId
           ? { $gt: [{ $size: "$userLike" }, 0] }
           : { $literal: false },
         isSaved: userId
           ? { $gt: [{ $size: "$userSave" }, 0] }
           : { $literal: false },
-        publicId: 0,
       },
     });
 

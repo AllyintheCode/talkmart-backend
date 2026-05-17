@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { updateUser, updateProvider, getProviderContact, uploadProfileImage, deleteProfileImage } from "../controllers/user.controller.js";
+import { updateUser, updateProvider, getProviderContact, deleteProfileImage } from "../controllers/user.controller.js";
 import { requireAuth, providerOnly, optionalAuth } from "../middlewares/auth.middleware.js";
 import { uploadImage } from "../middlewares/upload.middleware.js";
 
@@ -15,12 +15,12 @@ router.put("/user", requireAuth, updateUser);
 // PUT /api/users/provider → Provider profilini yenilə
 // requireAuth: guest → LOGIN_REQUIRED
 // ============================================================
-router.put("/provider", requireAuth, providerOnly, updateProvider);
+router.put("/provider", requireAuth, providerOnly, uploadImage.single("profileImage"), updateProvider);
 
 // ============================================================
-// Profil şəkli — User + Provider hər ikisi üçün
+// DELETE /api/users/profile-image → Profil şəklini sil (User + Provider)
+// requireAuth: guest → LOGIN_REQUIRED
 // ============================================================
-router.put("/profile-image", requireAuth, uploadImage.single("image"), uploadProfileImage);
 router.delete("/profile-image", requireAuth, deleteProfileImage);
 
 // ============================================================

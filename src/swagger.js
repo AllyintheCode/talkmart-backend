@@ -278,7 +278,8 @@ export default {
                   "password": { "type": "string", "format": "password", "example": "yenisirr123" },
                   "confirmPassword": { "type": "string", "format": "password", "example": "yenisirr123" },
                   "bio": { "type": "string", "example": "Xidmətlərimizi daha sərfəli və keyfiyyətli etdik. (Bioqrafiya)" },
-                  "location": { "type": "string", "example": "Gəncə, Azərbaycan" }
+                  "location": { "type": "string", "example": "Gəncə, Azərbaycan" },
+                  "profileImage": { "type": "string", "example": "https://res.cloudinary.com/.../profile.jpg", "nullable": true, "description": "Profil şəkli URL-i" }
                 }
               }
             }
@@ -295,45 +296,6 @@ export default {
       }
     },
     "/users/profile-image": {
-      "put": {
-        "summary": "Profil şəklini yüklə / dəyişdir",
-        "description": "🔐 **LOGIN TƏLƏB OLUNUR** — Həm User, həm Provider istifadə edə bilər. Əvvəlki şəkil avtomatik Cloudinary-dən silinir.",
-        "tags": ["User"],
-        "security": [{ "bearerAuth": [] }],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "required": ["image"],
-                "properties": {
-                  "image": { "type": "string", "format": "binary", "description": "Profil şəkli (jpg, png, webp, gif). Maksimum 10MB." }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Profil şəkli uğurla yükləndi",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "success": { "type": "boolean", "example": true },
-                    "message": { "type": "string", "example": "Profil şəkli uğurla yükləndi." },
-                    "profileImage": { "type": "string", "example": "https://res.cloudinary.com/.../profile.jpg" }
-                  }
-                }
-              }
-            }
-          },
-          "400": { "description": "Şəkil faylı əskikdir" },
-          "401": { "description": "Login tələb olunur" }
-        }
-      },
       "delete": {
         "summary": "Profil şəklini sil",
         "description": "🔐 **LOGIN TƏLƏB OLUNUR** — Həm User, həm Provider istifadə edə bilər. Cloudinary-dən silinir və DB-dən təmizlənir.",
@@ -395,13 +357,15 @@ export default {
                           "viewCount": { "type": "integer", "example": 128 },
                           "saveCount": { "type": "integer", "example": 15 },
                           "createdAt": { "type": "string", "format": "date-time" },
-                          "providerId": { "type": "string", "example": "64efc9abc1234567890def99" },
                           "provider": {
                             "type": "object",
                             "properties": {
+                              "_id": { "type": "string", "example": "64efc9abc1234567890def99", "description": "Providerin ID-si" },
                               "fullName": { "type": "string", "example": "Cəmilə Məmmədova" },
                               "companyName": { "type": "string", "example": "Cəmilə Təmizlik", "nullable": true },
-                              "phone": { "type": "string", "example": "+994501234567", "description": "Providerin əlaqə nömrəsi" }
+                              "phone": { "type": "string", "example": "+994501234567", "description": "Providerin əlaqə nömrəsi" },
+                              "address": { "type": "string", "example": "Neftçilər pr, 12, Bakı", "nullable": true, "description": "Providerin ünvanı" },
+                              "profileImage": { "type": "string", "example": "https://res.cloudinary.com/demo/image/upload/v157097/profile.jpg", "nullable": true, "description": "Providerin profil şəkli" }
                             }
                           },
                           "isLiked": { "type": "boolean", "description": "Cari istifadəçi bu videonu bəyənibmi. Guest üçün həmişə false.", "example": true },
@@ -464,13 +428,15 @@ export default {
                           "viewCount": { "type": "integer", "example": 128 },
                           "saveCount": { "type": "integer", "example": 15 },
                           "createdAt": { "type": "string", "format": "date-time" },
-                          "providerId": { "type": "string", "example": "64efc9abc1234567890def99" },
                           "provider": {
                             "type": "object",
                             "properties": {
+                              "_id": { "type": "string", "example": "64efc9abc1234567890def99", "description": "Providerin ID-si" },
                               "fullName": { "type": "string", "example": "Cəmilə Məmmədova" },
                               "companyName": { "type": "string", "example": "Cəmilə Təmizlik", "nullable": true },
-                              "phone": { "type": "string", "example": "+994501234567", "description": "Providerin əlaqə nömrəsi" }
+                              "phone": { "type": "string", "example": "+994501234567", "description": "Providerin əlaqə nömrəsi" },
+                              "address": { "type": "string", "example": "Neftçilər pr, 12, Bakı", "nullable": true, "description": "Providerin ünvanı" },
+                              "profileImage": { "type": "string", "example": "https://res.cloudinary.com/demo/image/upload/v157097/profile.jpg", "nullable": true, "description": "Providerin profil şəkli" }
                             }
                           },
                           "isLiked": { "type": "boolean", "description": "Cari istifadəçi bu videonu bəyənibmi. Guest üçün həmişə false.", "example": true },
@@ -527,13 +493,15 @@ export default {
                           "viewCount": { "type": "integer" },
                           "saveCount": { "type": "integer" },
                           "createdAt": { "type": "string", "format": "date-time" },
-                          "providerId": { "type": "string" },
                           "provider": {
                             "type": "object",
                             "properties": {
+                              "_id": { "type": "string", "description": "Providerin ID-si" },
                               "fullName": { "type": "string" },
                               "companyName": { "type": "string", "nullable": true },
-                              "phone": { "type": "string" }
+                              "phone": { "type": "string" },
+                              "address": { "type": "string", "nullable": true, "description": "Providerin ünvanı" },
+                              "profileImage": { "type": "string", "nullable": true, "description": "Providerin profil şəkli" }
                             }
                           },
                           "isLiked": { "type": "boolean", "example": true },
@@ -591,13 +559,15 @@ export default {
                           "viewCount": { "type": "integer" },
                           "saveCount": { "type": "integer" },
                           "createdAt": { "type": "string", "format": "date-time" },
-                          "providerId": { "type": "string" },
                           "provider": {
                             "type": "object",
                             "properties": {
+                              "_id": { "type": "string", "description": "Providerin ID-si" },
                               "fullName": { "type": "string" },
                               "companyName": { "type": "string", "nullable": true },
-                              "phone": { "type": "string" }
+                              "phone": { "type": "string" },
+                              "address": { "type": "string", "nullable": true, "description": "Providerin ünvanı" },
+                              "profileImage": { "type": "string", "nullable": true, "description": "Providerin profil şəkli" }
                             }
                           },
                           "isLiked": { "type": "boolean" },
