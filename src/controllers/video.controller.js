@@ -275,11 +275,8 @@ export const getExploreVideos = async (req, res) => {
     else if (sort === "price_low") sortOption = { price: 1 };
     else if (sort === "price_high") sortOption = { price: -1 };
 
-    const pipeline = [
+    const basePipeline = [
       { $match: matchStage },
-      { $sort: sortOption },
-      { $skip: skip },
-      { $limit: limit },
       // Provider məlumatları — fullName, companyName, phone, address
       {
         $lookup: {
@@ -296,15 +293,20 @@ export const getExploreVideos = async (req, res) => {
     if (location) {
       const safeLocation = String(location).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const locationRegex = new RegExp(safeLocation, "i");
-      pipeline.push({
+      basePipeline.push({
         $match: { "provider.providerProfile.address": locationRegex },
       });
     }
 
+    const dataPipeline = [
+      { $sort: sortOption },
+      { $skip: skip },
+      { $limit: limit },
+    ];
 
     // Login olmuş istifadəçi üçün isLiked / isSaved əlavə et
     if (userId) {
-      pipeline.push(
+      dataPipeline.push(
         {
           $lookup: {
             from: "videolikes",
@@ -349,7 +351,7 @@ export const getExploreVideos = async (req, res) => {
     }
 
     // Final projection — publicId göndərmirik
-    pipeline.push({
+    dataPipeline.push({
       $project: {
         _id: 1,
         title: 1,
@@ -380,10 +382,16 @@ export const getExploreVideos = async (req, res) => {
       },
     });
 
-    const [videos, total] = await Promise.all([
-      Video.aggregate(pipeline),
-      Video.countDocuments(matchStage),
-    ]);
+    basePipeline.push({
+      $facet: {
+        metadata: [{ $count: "total" }],
+        data: dataPipeline,
+      },
+    });
+
+    const result = await Video.aggregate(basePipeline);
+    const total = result[0]?.metadata[0]?.total || 0;
+    const videos = result[0]?.data || [];
 
     return res.status(200).json({
       success: true,

@@ -222,7 +222,81 @@ export default {
         }
       }
     },
+    "/users/change-password": {
+      "put": {
+        "summary": "İstifadəçinin (User və Provider) şifrəsini yenilə",
+        "tags": ["User"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["currentPassword", "newPassword", "confirmPassword"],
+                "properties": {
+                  "currentPassword": { "type": "string", "format": "password", "example": "kohneSirr123" },
+                  "newPassword": { "type": "string", "format": "password", "example": "yeniSirr123" },
+                  "confirmPassword": { "type": "string", "format": "password", "example": "yeniSirr123" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Şifrə uğurla yeniləndi." },
+          "400": { "description": "Şifrələr uyğun gəlmir və ya cari şifrə səhvdir." },
+          "401": { "description": "İcazəsiz (Token əskik və ya keçərsizdir)" },
+          "404": { "description": "İstifadəçi tapılmadı." }
+        }
+      }
+    },
     "/users/user": {
+      "get": {
+        "summary": "Adi istifadəçi profilini gətir",
+        "tags": ["User"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "İstifadəçi profili uğurla gətirildi.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "_id": { "type": "string", "example": "64efc9abc1234567890def12" },
+                        "role": { "type": "string", "example": "user" },
+                        "fullName": { "type": "string", "example": "Əli Əliyev" },
+                        "email": { "type": "string", "example": "ali@example.com" },
+                        "phone": { "type": "string", "example": "+994551234567" },
+                        "emailVerified": { "type": "boolean", "example": true },
+                        "profileImage": { "type": "string", "example": "https://res.cloudinary.com/.../profile.jpg", "nullable": true },
+                        "createdAt": { "type": "string", "format": "date-time" },
+                        "updatedAt": { "type": "string", "format": "date-time" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "İcazəsiz (Token əskik və ya keçərsizdir)" },
+          "403": { "description": "Bu API yalnız adi istifadəçilər üçündür." },
+          "404": { "description": "İstifadəçi tapılmadı" }
+        }
+      },
       "put": {
         "summary": "Yalnız adi istifadəçi (User) məlumatlarını yenilə",
         "tags": ["User"],
@@ -239,9 +313,7 @@ export default {
                 "type": "object",
                 "properties": {
                   "fullName": { "type": "string", "example": "Yeni Ad Soyad" },
-                  "email": { "type": "string", "format": "email", "example": "yeniemail@example.com" },
-                  "password": { "type": "string", "format": "password", "example": "yenisirr123" },
-                  "confirmPassword": { "type": "string", "format": "password", "example": "yenisirr123" }
+                  "email": { "type": "string", "format": "email", "example": "yeniemail@example.com" }
                 }
               }
             }
@@ -258,6 +330,56 @@ export default {
       }
     },
     "/users/provider": {
+      "get": {
+        "summary": "Provider profilini gətir",
+        "tags": ["User"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Provider profili uğurla gətirildi.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "provider": {
+                      "type": "object",
+                      "properties": {
+                        "_id": { "type": "string", "example": "64efc9abc1234567890def12" },
+                        "role": { "type": "string", "example": "provider" },
+                        "fullName": { "type": "string", "example": "Cəmilə Məmmədova" },
+                        "email": { "type": "string", "example": "cemile@example.com" },
+                        "phone": { "type": "string", "example": "+994501234567" },
+                        "emailVerified": { "type": "boolean", "example": true },
+                        "profileImage": { "type": "string", "example": "https://res.cloudinary.com/.../profile.jpg", "nullable": true },
+                        "providerProfile": {
+                          "type": "object",
+                          "properties": {
+                            "companyName": { "type": "string", "example": "Cəmilə Təmizlik" },
+                            "categoryId": { "type": "string", "example": "64efc9abc1234567890abc01" },
+                            "address": { "type": "string", "example": "Neftçilər pr, 12, Bakı" },
+                            "verified": { "type": "boolean", "example": true }
+                          }
+                        },
+                        "createdAt": { "type": "string", "format": "date-time" },
+                        "updatedAt": { "type": "string", "format": "date-time" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "İcazəsiz (Token əskik və ya keçərsizdir)" },
+          "403": { "description": "Bu API yalnız providerlər üçündür." },
+          "404": { "description": "Provider tapılmadı" }
+        }
+      },
       "put": {
         "summary": "Yalnız xidmət təminatçısı (Provider) məlumatlarını yenilə",
         "tags": ["User"],
@@ -275,8 +397,6 @@ export default {
                 "properties": {
                   "fullName": { "type": "string", "example": "Yeni Şirkət Sahibi" },
                   "email": { "type": "string", "format": "email", "example": "sirket@example.com" },
-                  "password": { "type": "string", "format": "password", "example": "yenisirr123" },
-                  "confirmPassword": { "type": "string", "format": "password", "example": "yenisirr123" },
                   "bio": { "type": "string", "example": "Xidmətlərimizi daha sərfəli və keyfiyyətli etdik. (Bioqrafiya)" },
                   "location": { "type": "string", "example": "Gəncə, Azərbaycan" },
                   "profileImage": { "type": "string", "example": "https://res.cloudinary.com/.../profile.jpg", "nullable": true, "description": "Profil şəkli URL-i" }

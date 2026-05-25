@@ -1,15 +1,33 @@
 import { Router } from "express";
-import { updateUser, updateProvider, getProviderContact, deleteProfileImage } from "../controllers/user.controller.js";
+import { getUserProfile, getProviderProfile, changePassword, updateUser, updateProvider, getProviderContact, deleteProfileImage } from "../controllers/user.controller.js";
 import { requireAuth, providerOnly, optionalAuth } from "../middlewares/auth.middleware.js";
 import { uploadImage } from "../middlewares/upload.middleware.js";
 
 const router = Router();
 
 // ============================================================
+// GET /api/users/user → Adi istifadəçi profilini gətir
+// requireAuth: guest → LOGIN_REQUIRED
+// ============================================================
+router.get("/user", requireAuth, getUserProfile);
+
+// ============================================================
+// PUT /api/users/change-password → Şifrəni yenilə
+// requireAuth: guest → LOGIN_REQUIRED
+// ============================================================
+router.put("/change-password", requireAuth, changePassword);
+
+// ============================================================
 // PUT /api/users/user → Adi istifadəçi profilini yenilə
 // requireAuth: guest → LOGIN_REQUIRED
 // ============================================================
 router.put("/user", requireAuth, updateUser);
+
+// ============================================================
+// GET /api/users/provider → Provider profilini gətir
+// requireAuth: guest → LOGIN_REQUIRED
+// ============================================================
+router.get("/provider", requireAuth, providerOnly, getProviderProfile);
 
 // ============================================================
 // PUT /api/users/provider → Provider profilini yenilə

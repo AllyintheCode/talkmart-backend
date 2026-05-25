@@ -2,16 +2,98 @@ import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import cloudinary from "../config/cloudinary.js";
 
-// Hemo (ümumi) yoxlama funksiyası - parolları yoxlayıb, heşləyir
-const checkAndHashPassword = async (password, confirmPassword) => {
-  if (password || confirmPassword) {
-    if (password !== confirmPassword) {
-      throw new Error("Şifrələr ('password' və 'confirmPassword') bir-birinə uyğun gəlmir.");
+// checkAndHashPassword funksiyası silinib, çünki şifrə yenilənməsi ayrıca API-də (changePassword) edilir.
+
+// GET /api/users/user
+// Yalnız asan (adi) istifadəçilərin (User) məlumatlarını gətirir
+export const getUserProfile = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const user = await User.findById(userId).select("-password -__v");
+    
+    if (!user) {
+      return res.status(404).json({ message: "İstifadəçi tapılmadı." });
     }
-    const salt = await bcrypt.genSalt(10);
-    return await bcrypt.hash(password, salt);
+    
+    if (user.role !== "user") {
+      return res.status(403).json({ message: "Bu API yalnız adi istifadəçilər üçündür." });
+    }
+    
+    return res.json({
+      success: true,
+      user,
+    });
+  } catch (err) {
+    console.error("getUserProfile error:", err);
+    return res.status(500).json({ message: "Server xətası baş verdi." });
   }
-  return null;
+};
+
+// GET /api/users/provider
+// Xidmət Təminatçısı (Provider) məlumatlarını gətirir
+export const getProviderProfile = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const provider = await User.findById(userId).select("-password -__v");
+    
+    if (!provider) {
+      return res.status(404).json({ message: "Provider tapılmadı." });
+    }
+    
+    if (provider.role !== "provider") {
+      return res.status(403).json({ message: "Bu API yalnız providerlər üçündür." });
+    }
+    
+    return res.json({
+      success: true,
+      provider,
+    });
+  } catch (err) {
+    console.error("getProviderProfile error:", err);
+    return res.status(500).json({ message: "Server xətası baş verdi." });
+  }
+};
+
+// PUT /api/users/change-password
+// Cari şifrəni təsdiqləyərək yeni şifrə təyin etmək
+export const changePassword = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { currentPassword, newPassword, confirmPassword } = req.body;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      return res.status(400).json({ message: "Bütün sahələri (currentPassword, newPassword, confirmPassword) daxil edin." });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ message: "Yeni şifrələr uyğun gəlmir." });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "İstifadəçi tapılmadı." });
+    }
+
+    // Mövcud şifrəni yoxla
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Cari şifrə yanlışdır." });
+    }
+
+    // Yeni şifrəni heşlə və yadda saxla
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    
+    await user.save();
+
+    return res.json({
+      success: true,
+      message: "Şifrəniz uğurla yeniləndi.",
+    });
+  } catch (err) {
+    console.error("changePassword error:", err);
+    return res.status(500).json({ message: "Server xətası baş verdi." });
+  }
 };
 
 // PUT /api/users/user
@@ -19,7 +101,7 @@ const checkAndHashPassword = async (password, confirmPassword) => {
 export const updateUser = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { fullName, email, password, confirmPassword } = req.body;
+    const { fullName, email } = req.body;
 
     const user = await User.findById(userId);
     if (!user) {
@@ -43,15 +125,7 @@ export const updateUser = async (req, res) => {
     // AdSoyad yeniləməsi
     if (fullName !== undefined) user.fullName = fullName;
 
-    // Şifrə yeniləməsi
-    if (password) {
-      try {
-        const hashedPassword = await checkAndHashPassword(password, confirmPassword);
-        if (hashedPassword) user.password = hashedPassword;
-      } catch (e) {
-        return res.status(400).json({ message: e.message });
-      }
-    }
+
 
     await user.save();
 
@@ -76,7 +150,7 @@ export const updateUser = async (req, res) => {
 export const updateProvider = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { fullName, email, password, confirmPassword, bio, location } = req.body;
+    const { fullName, email, bio, location } = req.body;
 
     const user = await User.findById(userId);
     if (!user) {
@@ -98,15 +172,6 @@ export const updateProvider = async (req, res) => {
 
     if (fullName !== undefined) user.fullName = fullName;
 
-    // Şifrə yeniləməsi
-    if (password) {
-      try {
-        const hashedPassword = await checkAndHashPassword(password, confirmPassword);
-        if (hashedPassword) user.password = hashedPassword;
-      } catch (e) {
-        return res.status(400).json({ message: e.message });
-      }
-    }
 
     // Providerin Bio və Location hissəsi ("providerProfile.about" bərabərdir Bio-ya)
     if (user.providerProfile) {
