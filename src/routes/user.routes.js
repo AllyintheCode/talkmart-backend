@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getUserProfile, getProviderProfile, changePassword, updateUser, updateProvider, getProviderContact, deleteProfileImage } from "../controllers/user.controller.js";
+import { getUserProfile, getProviderProfile, changePassword, updateUser, updateProvider, getProviderContact, deleteProfileImage, updateUserProfile } from "../controllers/user.controller.js";
 import { requireAuth, providerOnly, optionalAuth } from "../middlewares/auth.middleware.js";
 import { uploadImage } from "../middlewares/upload.middleware.js";
 
@@ -22,6 +22,18 @@ router.put("/change-password", requireAuth, changePassword);
 // requireAuth: guest → LOGIN_REQUIRED
 // ============================================================
 router.put("/user", requireAuth, updateUser);
+
+// ============================================================
+// GET /api/users/profile → Adi istifadəçi profilini gətir (alias of /user)
+// requireAuth: guest → LOGIN_REQUIRED
+// ============================================================
+router.get("/profile", requireAuth, getUserProfile);
+
+// ============================================================
+// POST /api/users/profile → Adi istifadəçi profilini yenilə (bio, şəkil, vs)
+// requireAuth: guest → LOGIN_REQUIRED
+// ============================================================
+router.post("/profile", requireAuth, uploadImage.single("profileImage"), updateUserProfile);
 
 // ============================================================
 // GET /api/users/provider → Provider profilini gətir

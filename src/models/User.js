@@ -28,6 +28,8 @@ const UserSchema = new mongoose.Schema(
 
     password: { type: String, required: true },
 
+    bio: { type: String, trim: true, default: null },
+
     // user-də null, provider-də object
     providerProfile: { type: ProviderProfileSchema, default: null },
 

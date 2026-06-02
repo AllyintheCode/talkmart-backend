@@ -145,6 +145,62 @@ export const updateUser = async (req, res) => {
   }
 };
 
+// POST /api/users/profile
+// Adi istifadəçilərin (User) məlumatlarını, bio və şəkilini yeniləyir
+export const updateUserProfile = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { fullName, email, bio } = req.body;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "İstifadəçi tapılmadı." });
+    }
+    
+    // Yalnız adi 'user' hesabı üçün
+    if (user.role !== "user") {
+      return res.status(403).json({ message: "Bu API yalnız adi istifadəçilər üçündür." });
+    }
+
+    if (email && email !== user.email) {
+      const emailExists = await User.findOne({ email });
+      if (emailExists) {
+        return res.status(409).json({ message: "Bu E-poçt ünvanı artıq istifadə olunur." });
+      }
+      user.email = email;
+    }
+
+    if (fullName !== undefined) user.fullName = fullName;
+    if (bio !== undefined) user.bio = bio;
+
+    // Profil şəkli yenilənməsi
+    if (req.file) {
+      if (user.profileImagePublicId) {
+        await cloudinary.uploader.destroy(user.profileImagePublicId, { resource_type: "image" });
+      }
+      user.profileImage = req.file.path;
+      user.profileImagePublicId = req.file.filename;
+    } else if (req.body.profileImage !== undefined) {
+      user.profileImage = req.body.profileImage;
+    }
+
+    await user.save();
+
+    const updatedUser = user.toObject();
+    delete updatedUser.password;
+    delete updatedUser.__v;
+
+    return res.json({
+      success: true,
+      message: "İstifadəçi profiliniz uğurla yeniləndi.",
+      user: updatedUser,
+    });
+  } catch (err) {
+    console.error("updateUserProfile error:", err);
+    return res.status(500).json({ message: "Server xətası baş verdi." });
+  }
+};
+
 // PUT /api/users/provider
 // Xidmət Təminatçısı (Provider) məlumatlarını yeniləyir
 export const updateProvider = async (req, res) => {

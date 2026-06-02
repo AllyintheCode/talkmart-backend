@@ -329,6 +329,83 @@ export default {
         }
       }
     },
+    "/users/profile": {
+      "get": {
+        "summary": "Adi istifadəçi profilini gətir",
+        "tags": ["User"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "İstifadəçi profili uğurla gətirildi.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "user": {
+                      "type": "object",
+                      "properties": {
+                        "_id": { "type": "string", "example": "64efc9abc1234567890def12" },
+                        "role": { "type": "string", "example": "user" },
+                        "fullName": { "type": "string", "example": "Əli Əliyev" },
+                        "email": { "type": "string", "example": "ali@example.com" },
+                        "phone": { "type": "string", "example": "+994551234567" },
+                        "emailVerified": { "type": "boolean", "example": true },
+                        "profileImage": { "type": "string", "example": "https://res.cloudinary.com/.../profile.jpg", "nullable": true },
+                        "bio": { "type": "string", "example": "Mənim haqqımda qısa məlumat", "nullable": true },
+                        "createdAt": { "type": "string", "format": "date-time" },
+                        "updatedAt": { "type": "string", "format": "date-time" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "İcazəsiz (Token əskik və ya keçərsizdir)" },
+          "403": { "description": "Bu API yalnız adi istifadəçilər üçündür." },
+          "404": { "description": "İstifadəçi tapılmadı" }
+        }
+      },
+      "post": {
+        "summary": "Adi istifadəçi (User) profilini, bio və şəklini yenilə",
+        "tags": ["User"],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "fullName": { "type": "string", "example": "Yeni Ad Soyad" },
+                  "email": { "type": "string", "format": "email", "example": "yeniemail@example.com" },
+                  "bio": { "type": "string", "example": "Mənim haqqımda yeni məlumat" },
+                  "profileImage": { "type": "string", "format": "binary", "description": "Profil şəkli (fayl)" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "İstifadəçi profili uğurla yeniləndi." },
+          "400": { "description": "Validasiya xətası var" },
+          "401": { "description": "İcazəsiz (Token əskik və ya keçərsizdir)" },
+          "403": { "description": "Provider və ya Admin bu api-dən istifadə edə bilməz" },
+          "404": { "description": "İstifadəçi tapılmadı" },
+          "409": { "description": "E-poçt ünvanı artıq istifadədədir" }
+        }
+      }
+    },
     "/users/provider": {
       "get": {
         "summary": "Provider profilini gətir",
