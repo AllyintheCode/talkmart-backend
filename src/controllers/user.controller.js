@@ -101,7 +101,7 @@ export const changePassword = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { fullName, email } = req.body;
+    const { fullName, email, bio } = req.body;
 
     const user = await User.findById(userId);
     if (!user) {
@@ -124,9 +124,18 @@ export const updateUser = async (req, res) => {
 
     // AdSoyad yeniləməsi
     if (fullName !== undefined) user.fullName = fullName;
+    if (bio !== undefined) user.bio = bio;
 
-
-
+    // Profil şəkli yenilənməsi
+    if (req.file) {
+      if (user.profileImagePublicId) {
+        await cloudinary.uploader.destroy(user.profileImagePublicId, { resource_type: "image" });
+      }
+      user.profileImage = req.file.path;
+      user.profileImagePublicId = req.file.filename;
+    } else if (req.body.profileImage !== undefined) {
+      user.profileImage = req.body.profileImage;
+    }
     await user.save();
 
     // Cavab (Response) qaytararkən şifrələri gizlət

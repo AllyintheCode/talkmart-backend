@@ -21,7 +21,7 @@ router.put("/change-password", requireAuth, changePassword);
 // PUT /api/users/user → Adi istifadəçi profilini yenilə
 // requireAuth: guest → LOGIN_REQUIRED
 // ============================================================
-router.put("/user", requireAuth, updateUser);
+router.put("/user", requireAuth, uploadImage.single("profileImage"), updateUser);
 
 // ============================================================
 // GET /api/users/profile → Adi istifadəçi profilini gətir (alias of /user)

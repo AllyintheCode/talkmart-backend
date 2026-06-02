@@ -308,12 +308,14 @@ export default {
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
                 "type": "object",
                 "properties": {
                   "fullName": { "type": "string", "example": "Yeni Ad Soyad" },
-                  "email": { "type": "string", "format": "email", "example": "yeniemail@example.com" }
+                  "email": { "type": "string", "format": "email", "example": "yeniemail@example.com" },
+                  "bio": { "type": "string", "example": "Mənim haqqımda yeni məlumat" },
+                  "profileImage": { "type": "string", "format": "binary", "description": "Profil şəkli (fayl)" }
                 }
               }
             }
