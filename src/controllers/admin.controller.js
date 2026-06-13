@@ -271,3 +271,29 @@ export const deleteOnboarding = async (req, res) => {
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
   }
 };
+
+// ============================
+// İSTİFADƏÇİ İDARƏETMƏSİ (ADMIN)
+// ============================
+
+// GET /api/admin/users (Yalnız Admin)
+// Bütün istifadəçiləri limitsiz və filtersiz gətirir (Admin paneldəki modal üçün)
+export const getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find()
+      .select("-password -__v")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      success: true,
+      count: users.length,
+      users,
+    });
+  } catch (err) {
+    console.error("getAllUsers error:", err);
+    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
+  }
+};
+
+

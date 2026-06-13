@@ -1129,6 +1129,49 @@ export default {
         }
       }
     },
+    "/admin/users": {
+      "get": {
+        "summary": "Sistemdəki bütün istifadəçiləri limitsiz və filtersiz gətirir",
+        "tags": ["Admin/Users"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "İstifadəçilərin siyahısı uğurla gətirildi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "count": { "type": "integer", "example": 1 },
+                    "users": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "_id": { "type": "string", "example": "64efc9abc1234567890def12" },
+                          "role": { "type": "string", "example": "user" },
+                          "fullName": { "type": "string", "example": "Əli Əliyev" },
+                          "email": { "type": "string", "example": "ali@example.com" },
+                          "phone": { "type": "string", "example": "+994551234567" },
+                          "bio": { "type": "string", "example": "Haqqında", "nullable": true },
+                          "profileImage": { "type": "string", "example": "https://...", "nullable": true },
+                          "emailVerified": { "type": "boolean", "example": true },
+                          "createdAt": { "type": "string", "format": "date-time" },
+                          "updatedAt": { "type": "string", "format": "date-time" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Token tapılmadı və ya yanlışdır" },
+          "403": { "description": "Bu əməliyyat yalnız adminlər üçündür" }
+        }
+      }
+    },
     "/onboarding": {
       "get": {
         "summary": "Bütün onboarding ekranlarını sıralı olaraq gətir",

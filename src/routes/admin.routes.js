@@ -8,11 +8,18 @@ import {
   updateCategory,
   deleteCategory,
   getDashboardStats,
+  getAllUsers,
 } from "../controllers/admin.controller.js";
 import { verifyToken, adminOnly } from "../middlewares/auth.middleware.js";
 import { uploadImage } from "../middlewares/upload.middleware.js";
 
 const router = Router();
+
+// ============================
+// İSTİFADƏÇİ ROUTE-ları
+// ============================
+router.get("/users", verifyToken, adminOnly, getAllUsers);
+
 
 // ============================
 // DASHBOARD ROUTE-ları
