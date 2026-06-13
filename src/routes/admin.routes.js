@@ -9,6 +9,9 @@ import {
   deleteCategory,
   getDashboardStats,
   getAllUsers,
+  blockUser,
+  unblockUser,
+  deleteUser,
 } from "../controllers/admin.controller.js";
 import { verifyToken, adminOnly } from "../middlewares/auth.middleware.js";
 import { uploadImage } from "../middlewares/upload.middleware.js";
@@ -19,6 +22,9 @@ const router = Router();
 // İSTİFADƏÇİ ROUTE-ları
 // ============================
 router.get("/users", verifyToken, adminOnly, getAllUsers);
+router.patch("/users/:id/block", verifyToken, adminOnly, blockUser);
+router.patch("/users/:id/unblock", verifyToken, adminOnly, unblockUser);
+router.delete("/users/:id", verifyToken, adminOnly, deleteUser);
 
 
 // ============================

@@ -1172,6 +1172,119 @@ export default {
         }
       }
     },
+    "/admin/users/{id}/block": {
+      "patch": {
+        "summary": "İstifadəçini blokla (Admin paneli)",
+        "description": "Admin seçilmiş istifadəçini bloklayır. Bloklanmış istifadəçi sisteme giriş edə bilmir. Admin hesabları bloklanamaz.",
+        "tags": ["Admin/Users"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "İstifadəçinin MongoDB ObjectId-si",
+            "example": "64efc9abc1234567890def12"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "İstifadəçi uğurla bloklandı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Əli Əliyev uğurla bloklandı." }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Token tapılmadı və ya yanlışdır" },
+          "403": { "description": "Admin hesabını bloklamaq mümkün deyil" },
+          "404": { "description": "İstifadəçi tapılmadı" },
+          "409": { "description": "İstifadəçi artıq bloklanıb" }
+        }
+      }
+    },
+    "/admin/users/{id}/unblock": {
+      "patch": {
+        "summary": "İstifadəçinin blokunu aç (Admin paneli)",
+        "description": "Admin tərəfindən əvvəlcədən bloklanmış istifadəçinin blokunu aradan qaldırır.",
+        "tags": ["Admin/Users"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "İstifadəçinin MongoDB ObjectId-si",
+            "example": "64efc9abc1234567890def12"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "İstifadəçinin bloku uğurla açıldı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Əli Əliyev uğurla blokdan çıxarıldı." }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Token tapılmadı və ya yanlışdır" },
+          "403": { "description": "Bu əməliyyat yalnız adminlər üçündür" },
+          "404": { "description": "İstifadəçi tapılmadı" },
+          "409": { "description": "İstifadəçi bloklanmayıb" }
+        }
+      }
+    },
+    "/admin/users/{id}": {
+      "delete": {
+        "summary": "İstifadəçini sil (Admin paneli)",
+        "description": "Admin seçilmiş istifadəçi hesabını sistemdən tamamilə silir. Cloudinary-dəki profil şəkli də silinir. Admin hesabları silinə bilməz.",
+        "tags": ["Admin/Users"],
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "İstifadəçinin MongoDB ObjectId-si",
+            "example": "64efc9abc1234567890def12"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "İstifadəçi uğurla silindi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Əli Əliyev hesabı uğurla silindi." }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Token tapılmadı və ya yanlışdır" },
+          "403": { "description": "Admin hesabını silmək mümkün deyil" },
+          "404": { "description": "İstifadəçi tapılmadı" }
+        }
+      }
+    },
     "/onboarding": {
       "get": {
         "summary": "Bütün onboarding ekranlarını sıralı olaraq gətir",

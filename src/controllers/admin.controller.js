@@ -296,4 +296,103 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
+// ============================================================
+// PATCH /api/admin/users/:id/block — İstifadəçini blokla
+// ============================================================
+export const blockUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id);
 
+    if (!user) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "İstifadəçi tapılmadı." });
+    }
+
+    // Admini bloklamaq olmaz
+    if (user.role === "admin") {
+      return res.status(403).json({ error: "FORBIDDEN", message: "Admin hesabını bloklamaq mümkün deyil." });
+    }
+
+    if (user.isBlocked) {
+      return res.status(409).json({ error: "ALREADY_BLOCKED", message: "İstifadəçi artıq bloklanıb." });
+    }
+
+    user.isBlocked = true;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `${user.fullName} uğurla bloklandı.`,
+    });
+  } catch (err) {
+    console.error("blockUser error:", err);
+    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
+  }
+};
+
+// ============================================================
+// PATCH /api/admin/users/:id/unblock — İstifadəçinin blokunu aç
+// ============================================================
+export const unblockUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "İstifadəçi tapılmadı." });
+    }
+
+    if (!user.isBlocked) {
+      return res.status(409).json({ error: "NOT_BLOCKED", message: "İstifadəçi bloklanmayıb." });
+    }
+
+    user.isBlocked = false;
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `${user.fullName} uğurla blokdan çıxarıldı.`,
+    });
+  } catch (err) {
+    console.error("unblockUser error:", err);
+    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
+  }
+};
+
+// ============================================================
+// DELETE /api/admin/users/:id — İstifadəçini sil
+// ============================================================
+export const deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "İstifadəçi tapılmadı." });
+    }
+
+    // Admini silmək olmaz
+    if (user.role === "admin") {
+      return res.status(403).json({ error: "FORBIDDEN", message: "Admin hesabını silmək mümkün deyil." });
+    }
+
+    // Əgər Cloudinary-də profil şəkli varsa, onu da sil
+    if (user.profileImagePublicId) {
+      try {
+        await cloudinary.uploader.destroy(user.profileImagePublicId, { resource_type: "image" });
+      } catch (cloudErr) {
+        console.warn("Cloudinary profil şəkli silinərkən xəta:", cloudErr.message);
+      }
+    }
+
+    await user.deleteOne();
+
+    return res.status(200).json({
+      success: true,
+      message: `${user.fullName} hesabı uğurla silindi.`,
+    });
+  } catch (err) {
+    console.error("deleteUser error:", err);
+    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
+  }
+};

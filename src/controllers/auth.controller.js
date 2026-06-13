@@ -271,6 +271,14 @@ export async function login(req, res) {
       });
     }
 
+    // Admin tərəfindən bloklanıbsa girişə icazə verilmir
+    if (user.isBlocked) {
+      return res.status(403).json({
+        error: "ACCOUNT_BLOCKED",
+        message: "Hesabınız admin tərəfindən bloklanmışdır. Ətraflı məlumat üçün bizimlə əlaqə saxlayın.",
+      });
+    }
+
     const token = signAccessToken({ id: user._id.toString(), role: user.role });
 
     return res.json({

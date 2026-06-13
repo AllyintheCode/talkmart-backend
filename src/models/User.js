@@ -39,6 +39,9 @@ const UserSchema = new mongoose.Schema(
 
     // qeydiyyat OTP-si təsdiqlənibmi?
     emailVerified: { type: Boolean, default: false },
+
+    // Admin tərəfindən bloklanıbmı?
+    isBlocked: { type: Boolean, default: false },
   },
   { timestamps: true },
 );
