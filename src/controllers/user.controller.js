@@ -1,6 +1,9 @@
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import cloudinary from "../config/cloudinary.js";
+import crypto from "crypto";
+import Otp from "../models/Otp.js";
+import { sendEmailOtp } from "../utils/email.js";
 
 // checkAndHashPassword funksiyası silinib, çünki şifrə yenilənməsi ayrıca API-də (changePassword) edilir.
 
@@ -101,9 +104,10 @@ export const changePassword = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { fullName, email, bio } = req.body;
+    const { fullName, email, bio, phone } = req.body;
 
     const user = await User.findById(userId);
+    let emailVerificationSent = false;
     if (!user) {
       return res.status(404).json({ message: "İstifadəçi tapılmadı." });
     }
@@ -119,7 +123,33 @@ export const updateUser = async (req, res) => {
       if (emailExists) {
         return res.status(409).json({ message: "Bu E-poçt ünvanı artıq istifadə olunur." });
       }
-      user.email = email;
+      
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const otpHash = crypto.createHash("sha256").update(code).digest("hex");
+      
+      await Otp.findOneAndUpdate(
+        { email: user.email, purpose: "email_change" },
+        {
+          otpHash,
+          newEmail: email,
+          expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+          attemptsLeft: 5,
+          lastSentAt: new Date(),
+        },
+        { upsert: true }
+      );
+      
+      await sendEmailOtp(user.email, code, "email_change");
+      emailVerificationSent = true;
+    }
+
+    // Telefon yeniləməsi
+    if (phone && phone !== user.phone) {
+      const phoneExists = await User.findOne({ phone });
+      if (phoneExists) {
+        return res.status(409).json({ message: "Bu telefon nömrəsi artıq istifadə olunur." });
+      }
+      user.phone = phone;
     }
 
     // AdSoyad yeniləməsi
@@ -145,8 +175,11 @@ export const updateUser = async (req, res) => {
 
     return res.json({
       success: true,
-      message: "İstifadəçi profiliniz uğurla yeniləndi.",
+      message: emailVerificationSent 
+        ? "Profiliniz yeniləndi. Email dəyişikliyi üçün köhnə emailinizə təsdiq kodu göndərildi." 
+        : "İstifadəçi profiliniz uğurla yeniləndi.",
       user: updatedUser,
+      requiresEmailVerification: emailVerificationSent,
     });
   } catch (err) {
     console.error("updateUser error:", err);
@@ -159,9 +192,10 @@ export const updateUser = async (req, res) => {
 export const updateUserProfile = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { fullName, email, bio } = req.body;
+    const { fullName, email, bio, phone } = req.body;
 
     const user = await User.findById(userId);
+    let emailVerificationSent = false;
     if (!user) {
       return res.status(404).json({ message: "İstifadəçi tapılmadı." });
     }
@@ -176,7 +210,32 @@ export const updateUserProfile = async (req, res) => {
       if (emailExists) {
         return res.status(409).json({ message: "Bu E-poçt ünvanı artıq istifadə olunur." });
       }
-      user.email = email;
+
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const otpHash = crypto.createHash("sha256").update(code).digest("hex");
+      
+      await Otp.findOneAndUpdate(
+        { email: user.email, purpose: "email_change" },
+        {
+          otpHash,
+          newEmail: email,
+          expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+          attemptsLeft: 5,
+          lastSentAt: new Date(),
+        },
+        { upsert: true }
+      );
+      
+      await sendEmailOtp(user.email, code, "email_change");
+      emailVerificationSent = true;
+    }
+
+    if (phone && phone !== user.phone) {
+      const phoneExists = await User.findOne({ phone });
+      if (phoneExists) {
+        return res.status(409).json({ message: "Bu telefon nömrəsi artıq istifadə olunur." });
+      }
+      user.phone = phone;
     }
 
     if (fullName !== undefined) user.fullName = fullName;
@@ -201,8 +260,11 @@ export const updateUserProfile = async (req, res) => {
 
     return res.json({
       success: true,
-      message: "İstifadəçi profiliniz uğurla yeniləndi.",
+      message: emailVerificationSent 
+        ? "Profiliniz yeniləndi. Email dəyişikliyi üçün köhnə emailinizə təsdiq kodu göndərildi." 
+        : "İstifadəçi profiliniz uğurla yeniləndi.",
       user: updatedUser,
+      requiresEmailVerification: emailVerificationSent,
     });
   } catch (err) {
     console.error("updateUserProfile error:", err);
@@ -215,9 +277,10 @@ export const updateUserProfile = async (req, res) => {
 export const updateProvider = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { fullName, email, bio, location } = req.body;
+    const { fullName, email, bio, location, phone } = req.body;
 
     const user = await User.findById(userId);
+    let emailVerificationSent = false;
     if (!user) {
       return res.status(404).json({ message: "Provider tapılmadı." });
     }
@@ -232,7 +295,33 @@ export const updateProvider = async (req, res) => {
       if (emailExists) {
         return res.status(409).json({ message: "Bu E-poçt ünvanı artıq istifadə olunur." });
       }
-      user.email = email;
+
+      const code = String(Math.floor(100000 + Math.random() * 900000));
+      const otpHash = crypto.createHash("sha256").update(code).digest("hex");
+      
+      await Otp.findOneAndUpdate(
+        { email: user.email, purpose: "email_change" },
+        {
+          otpHash,
+          newEmail: email,
+          expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+          attemptsLeft: 5,
+          lastSentAt: new Date(),
+        },
+        { upsert: true }
+      );
+      
+      await sendEmailOtp(user.email, code, "email_change");
+      emailVerificationSent = true;
+    }
+
+    // Telefon yeniləməsi
+    if (phone && phone !== user.phone) {
+      const phoneExists = await User.findOne({ phone });
+      if (phoneExists) {
+        return res.status(409).json({ message: "Bu telefon nömrəsi artıq istifadə olunur." });
+      }
+      user.phone = phone;
     }
 
     if (fullName !== undefined) user.fullName = fullName;
@@ -263,8 +352,11 @@ export const updateProvider = async (req, res) => {
 
     return res.json({
       success: true,
-      message: "Provider profiliniz uğurla yeniləndi.",
+      message: emailVerificationSent 
+        ? "Profiliniz yeniləndi. Email dəyişikliyi üçün köhnə emailinizə təsdiq kodu göndərildi." 
+        : "Provider profiliniz uğurla yeniləndi.",
       user: updatedUser,
+      requiresEmailVerification: emailVerificationSent,
     });
   } catch (err) {
     console.error("updateProvider error:", err);
@@ -371,6 +463,83 @@ export const deleteProfileImage = async (req, res) => {
     });
   } catch (err) {
     console.error("deleteProfileImage error:", err);
+    return res.status(500).json({ message: "Server xətası baş verdi." });
+  }
+};
+
+// ============================================================
+// POST /api/users/verify-email-change
+// Köhnə emailə göndərilən OTP ilə yeni emailə keçid
+// requireAuth ilə qorunur
+// ============================================================
+export const verifyEmailChange = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const { code } = req.body;
+
+    if (!code) {
+      return res.status(400).json({ message: "OTP kodu daxil edin." });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: "İstifadəçi tapılmadı." });
+    }
+
+    // Köhnə email üçün email_change OTP-ni tap
+    const record = await Otp.findOne({ email: user.email, purpose: "email_change" });
+    if (!record) {
+      return res.status(400).json({ message: "Email dəyişmə tələbi tapılmadı. Yenidən cəhd edin." });
+    }
+
+    // Vaxt yoxlaması
+    if (record.expiresAt.getTime() < Date.now()) {
+      await Otp.deleteOne({ _id: record._id });
+      return res.status(400).json({ message: "OTP-nin vaxtı bitib. Yenidən email dəyişmə tələbi göndərin." });
+    }
+
+    // Cəhd sayı yoxlaması
+    if (record.attemptsLeft <= 0) {
+      await Otp.deleteOne({ _id: record._id });
+      return res.status(429).json({ message: "Çox cəhd edildi. Yenidən email dəyişmə tələbi göndərin." });
+    }
+
+    // OTP hash yoxlaması
+    const inputHash = crypto.createHash("sha256").update(String(code).trim()).digest("hex");
+    if (inputHash !== record.otpHash) {
+      record.attemptsLeft -= 1;
+      await record.save();
+      return res.status(400).json({
+        message: "OTP yanlışdır.",
+        attemptsLeft: record.attemptsLeft,
+      });
+    }
+
+    // OTP doğrudur — yeni emailə keç
+    const newEmail = record.newEmail;
+
+    // Yeni emailin başqa istifadəçidə olmadığını yenidən yoxla
+    const emailTaken = await User.findOne({ email: newEmail });
+    if (emailTaken) {
+      await Otp.deleteOne({ _id: record._id });
+      return res.status(409).json({ message: "Bu email artıq başqa bir istifadəçiyə məxsusdur." });
+    }
+
+    user.email = newEmail;
+    await user.save();
+    await Otp.deleteOne({ _id: record._id });
+
+    const updatedUser = user.toObject();
+    delete updatedUser.password;
+    delete updatedUser.__v;
+
+    return res.json({
+      success: true,
+      message: "Email ünvanınız uğurla yeniləndi.",
+      user: updatedUser,
+    });
+  } catch (err) {
+    console.error("verifyEmailChange error:", err);
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };

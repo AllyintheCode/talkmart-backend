@@ -9,8 +9,9 @@ const OtpSchema = new mongoose.Schema(
       trim: true,
       index: true,
     },
-    purpose: { type: String, required: true }, // "register" | "login"
+    purpose: { type: String, required: true }, // "register" | "login" | "email_change"
     otpHash: { type: String, required: true },
+    newEmail: { type: String, lowercase: true, trim: true }, // Yeni email-i saxlamaq üçün
     expiresAt: { type: Date, required: true },
     attemptsLeft: { type: Number, default: 5 },
     lastSentAt: { type: Date, default: Date.now },

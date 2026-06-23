@@ -330,13 +330,16 @@ paths:
           description: İstifadəçi tapılmadı
     put:
       summary: Yalnız adi istifadəçi (User) məlumatlarını yenilə
+      description: |
+        Profil məlumatlarını yeniləyir.
+        **Email dəyişdirildikdə** köhnə emailə OTP göndərilir. Email dəyişikliyi `POST /users/verify-email-change` ilə təsdiqlənməlidir.
       tags: [User]
       security:
         - bearerAuth: []
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
               type: object
               properties:
@@ -347,12 +350,38 @@ paths:
                   type: string
                   format: email
                   example: "yeniemail@example.com"
-
+                  description: "Dəyişdirildikdə köhnə emailə OTP göndərilir"
+                phone:
+                  type: string
+                  example: "+994551112233"
+                  description: "Başqa hesabda olmayan nömrə"
+                bio:
+                  type: string
+                  example: "Salam, mən Əliyəm!"
+                profileImage:
+                  type: string
+                  format: binary
+                  description: "Profil şəkli faylı (multipart)"
       responses:
         '200':
-          description: İstifadəçi profili uğurla yeniləndi.
-        '400':
-          description: Şifrələr eyni deyil və ya validasiya xətası var
+          description: Profil yeniləndi (email dəyişibsə OTP göndərildi).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Profiliniz yeniləndi. Email dəyişikliyi üçün köhnə emailinizə təsdiq kodu göndərildi."
+                  requiresEmailVerification:
+                    type: boolean
+                    example: true
+                    description: "true olduqda /users/verify-email-change çağırılmalıdır"
+                  user:
+                    type: object
         '401':
           description: İcazəsiz (Token əskik və ya keçərsizdir)
         '403':
@@ -360,7 +389,7 @@ paths:
         '404':
           description: İstifadəçi tapılmadı
         '409':
-          description: E-poçt ünvanı artıq istifadədədir
+          description: E-poçt və ya telefon nömrəsi artıq istifadədədir
 
   /users/provider:
     get:
@@ -433,13 +462,16 @@ paths:
           description: Provider tapılmadı
     put:
       summary: Yalnız xidmət təminatçısı (Provider) məlumatlarını yenilə
+      description: |
+        Provider profil məlumatlarını yeniləyir.
+        **Email dəyişdirildikdə** köhnə emailə OTP göndərilir. Email dəyişikliyi `POST /users/verify-email-change` ilə təsdiqlənməlidir.
       tags: [User]
       security:
         - bearerAuth: []
       requestBody:
         required: true
         content:
-          application/json:
+          multipart/form-data:
             schema:
               type: object
               properties:
@@ -450,31 +482,49 @@ paths:
                   type: string
                   format: email
                   example: "sirket@example.com"
-
+                  description: "Dəyişdirildikdə köhnə emailə OTP göndərilir"
+                phone:
+                  type: string
+                  example: "+994501112233"
+                  description: "Başqa hesabda olmayan nömrə"
                 bio:
                   type: string
-                  example: "Xidmətlərimizi daha sərfəli və keyfiyyətli etdik. (Bioqrafiya)"
+                  example: "Xidmətlərimizi daha sərfəli və keyfiyyətli etdik."
                 location:
                   type: string
                   example: "Gəncə, Azərbaycan"
                 profileImage:
                   type: string
-                  example: "https://res.cloudinary.com/.../profile.jpg"
-                  nullable: true
-                  description: "Profil şəkli URL-i"
+                  format: binary
+                  description: "Profil şəkli faylı (multipart)"
       responses:
         '200':
-          description: Provider profili uğurla yeniləndi.
-        '400':
-          description: Şifrələr eyni deyil və ya validasiya xətası var
+          description: Provider profili yeniləndi (email dəyişibsə OTP göndərildi).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Profiliniz yeniləndi. Email dəyişikliyi üçün köhnə emailinizə təsdiq kodu göndərildi."
+                  requiresEmailVerification:
+                    type: boolean
+                    example: true
+                    description: "true olduqda /users/verify-email-change çağırılmalıdır"
+                  user:
+                    type: object
         '401':
           description: İcazəsiz (Token əskik və ya keçərsizdir)
         '403':
-          description: İstifadəçi provayder deyil (icazə yoxdur)
+          description: İstifadəçi provider deyil (icazə yoxdur)
         '404':
           description: İstifadəçi tapılmadı
         '409':
-          description: E-poçt ünvanı artıq istifadədədir
+          description: E-poçt və ya telefon nömrəsi artıq istifadədədir
 
   /users/profile-image:
     delete:
@@ -502,6 +552,87 @@ paths:
         '401':
           description: Login tələb olunur
 
+  /users/verify-email-change:
+    post:
+      summary: Email dəyişmə OTP-ni təsdiqlə
+      description: |
+        **Email dəyişmə prosesinin 2-ci addımı.**
+        
+        `PUT /users/user` və ya `PUT /users/provider` vasitəsilə yeni email göndərildikdə **köhnə emailə** 6 rəqəmli OTP kodu göndərilir.
+        Bu endpoint həmin OTP-ni qəbul edib doğru olduğunu yoxlayır və istifadəçinin emailini yeni email ünvanına keçirir.
+        
+        **Axın:**
+        1. `PUT /users/user` → `{ email: "yeni@email.com" }` → Server köhnə emailə OTP göndərir
+        2. İstifadəçi köhnə emaildən kodu alır
+        3. `POST /users/verify-email-change` → `{ code: "123456" }` → Email dəyişir
+      tags: [User]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  minLength: 6
+                  maxLength: 6
+                  example: "847291"
+                  description: "Köhnə emailə göndərilən 6 rəqəmli OTP"
+      responses:
+        '200':
+          description: Email uğurla dəyişdirildi.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Email ünvanınız uğurla yeniləndi."
+                  user:
+                    type: object
+                    properties:
+                      _id:
+                        type: string
+                        example: "64efc9abc1234567890def12"
+                      email:
+                        type: string
+                        example: "yeni@example.com"
+                      fullName:
+                        type: string
+                        example: "Əli Əliyev"
+                      role:
+                        type: string
+                        example: "user"
+        '400':
+          description: OTP yanlışdır, vaxtı bitib və ya tələb tapılmadı.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: "OTP yanlışdır."
+                  attemptsLeft:
+                    type: integer
+                    example: 3
+                    description: "Qalan cəhd sayı (yalnız yanlış kod halında)"
+        '401':
+          description: İcazəsiz (Token əskik və ya keçərsizdir)
+        '404':
+          description: İstifadəçi tapılmadı
+        '409':
+          description: Yeni email artıq başqa bir istifadəçiyə məxsusdur
+        '429':
+          description: Çox cəhd edildi. Yenidən email dəyişmə tələbi göndərin.
 
   # ==============================
   #    VIDEO FEED / EXPLORE (BİRLƏŞDİRİLMİŞ API)

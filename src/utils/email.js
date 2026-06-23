@@ -18,6 +18,7 @@ export async function sendEmailOtp(to, code, purpose = "login") {
     register: "Qeydiyyat kodu",
     forgot_password: "Şifrə sıfırlama kodu",
     login: "Giriş kodu",
+    email_change: "Email dəyişmə təsdiq kodu",
   };
   const title = titles[purpose] || "Təsdiq kodu";
 

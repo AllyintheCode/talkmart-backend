@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getUserProfile, getProviderProfile, changePassword, updateUser, updateProvider, getProviderContact, deleteProfileImage, updateUserProfile } from "../controllers/user.controller.js";
+import { getUserProfile, getProviderProfile, changePassword, updateUser, updateProvider, getProviderContact, deleteProfileImage, updateUserProfile, verifyEmailChange } from "../controllers/user.controller.js";
 import { requireAuth, providerOnly, optionalAuth } from "../middlewares/auth.middleware.js";
 import { uploadImage } from "../middlewares/upload.middleware.js";
 
@@ -52,6 +52,12 @@ router.put("/provider", requireAuth, providerOnly, uploadImage.single("profileIm
 // requireAuth: guest → LOGIN_REQUIRED
 // ============================================================
 router.delete("/profile-image", requireAuth, deleteProfileImage);
+
+// ============================================================
+// POST /api/users/verify-email-change → Email dəyişmə təsdiq OTP
+// requireAuth: guest → LOGIN_REQUIRED
+// ============================================================
+router.post("/verify-email-change", requireAuth, verifyEmailChange);
 
 // ============================================================
 // GET /api/users/provider/:id/contact → Providerin əlaqə məlumatı
