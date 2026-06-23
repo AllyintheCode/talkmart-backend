@@ -800,7 +800,7 @@ export default {
                   "description": { "type": "string", "description": "Xidmət haqqında ətraflı məlumat", "example": "Boru və su xətlərini tez bir zamanda təmir edirik." },
                   "price": { "type": "number", "format": "float", "description": "Xidmət videosu üzrə təyin edilmiş qiymət", "example": 50.5 },
                   "categoryId": { "type": "string", "description": "Sistemin bazasından gələn Kateqoriya ObjectId-si" },
-                  "video": { "type": "string", "format": "binary", "description": "Əsas video faylı (.mp4, .mov, vs.) Maksimum 500MB." }
+                  "video": { "type": "string", "format": "binary", "description": "Əsas video faylı (.mp4, .mov, vs.) Maksimum 250MB." }
                 }
               }
             }

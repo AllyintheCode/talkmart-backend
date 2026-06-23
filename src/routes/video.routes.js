@@ -64,7 +64,7 @@ router.post("/upload", verifyToken, providerOnly, (req, res, next) => {
       if (err.code === "LIMIT_FILE_SIZE") {
         return res.status(413).json({
           error: "FILE_TOO_LARGE",
-          message: "Video faylın həcmi çox böyükdür (Maksimum 500MB).",
+          message: "Video faylın həcmi çox böyükdür (Maksimum 250MB).",
         });
       }
       if (err.message && err.message.includes("Yalnız video faylları")) {

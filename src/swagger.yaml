@@ -1072,7 +1072,7 @@ paths:
                 video:
                   type: string
                   format: binary
-                  description: "Əsas video faylı (.mp4, .mov, vs.) Maksimum 500MB."
+                  description: "Əsas video faylı (.mp4, .mov, vs.) Maksimum 250MB."
       responses:
         '201':
           description: Video uğurla Cloudinary-yə yükləndi və bazada yadda saxlanıldı.
