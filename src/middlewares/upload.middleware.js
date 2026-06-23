@@ -1,20 +1,15 @@
 import multer from "multer";
-import { CloudinaryStorage } from "multer-storage-cloudinary";
-import cloudinary from "../config/cloudinary.js";
+import path from "path";
 
-const storage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: "talkmart/videos",
-    resource_type: "video",
-    allowed_formats: ["mp4", "mov", "avi", "mkv"],
-    // Cloudinary avtomatik thumbnail yaradır
-    eager: [{ format: "jpg", transformation: [{ width: 400, crop: "scale" }] }],
-    eager_async: true,
-  },
-});
+// ============================
+// MEMORY STORAGE — Fayl RAM-da saxlanılır, controller-dən R2-yə yüklənir
+// ============================
+const storage = multer.memoryStorage();
 
-const fileFilter = (req, file, cb) => {
+// ============================
+// VIDEO UPLOAD
+// ============================
+const videoFilter = (req, file, cb) => {
   const allowed = ["video/mp4", "video/quicktime", "video/x-msvideo", "video/x-matroska"];
   if (allowed.includes(file.mimetype)) {
     cb(null, true);
@@ -25,22 +20,13 @@ const fileFilter = (req, file, cb) => {
 
 export const uploadVideo = multer({
   storage,
-  fileFilter,
-  limits: { fileSize: 15 * 1024 * 1024 }, // 15 MB
+  fileFilter: videoFilter,
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB
 });
 
 // ============================
-// IMAGE UPLOADS
+// IMAGE UPLOAD
 // ============================
-const imageStorage = new CloudinaryStorage({
-  cloudinary,
-  params: {
-    folder: "talkmart/images",
-    resource_type: "image",
-    allowed_formats: ["jpg", "jpeg", "png", "webp", "gif"],
-  },
-});
-
 const imageFilter = (req, file, cb) => {
   const allowedImages = ["image/jpeg", "image/png", "image/webp", "image/gif"];
   if (allowedImages.includes(file.mimetype)) {
@@ -51,7 +37,7 @@ const imageFilter = (req, file, cb) => {
 };
 
 export const uploadImage = multer({
-  storage: imageStorage,
+  storage,
   fileFilter: imageFilter,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB per image limit
 });

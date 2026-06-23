@@ -282,7 +282,7 @@ export default {
                         "email": { "type": "string", "example": "ali@example.com" },
                         "phone": { "type": "string", "example": "+994551234567" },
                         "emailVerified": { "type": "boolean", "example": true },
-                        "profileImage": { "type": "string", "example": "https://res.cloudinary.com/.../profile.jpg", "nullable": true },
+                        "profileImage": { "type": "string", "example": "https://your-r2-domain.r2.dev/talkmart/images/profile.jpg", "nullable": true },
                         "createdAt": { "type": "string", "format": "date-time" },
                         "updatedAt": { "type": "string", "format": "date-time" }
                       }
@@ -358,7 +358,7 @@ export default {
                         "email": { "type": "string", "example": "ali@example.com" },
                         "phone": { "type": "string", "example": "+994551234567" },
                         "emailVerified": { "type": "boolean", "example": true },
-                        "profileImage": { "type": "string", "example": "https://res.cloudinary.com/.../profile.jpg", "nullable": true },
+                        "profileImage": { "type": "string", "example": "https://your-r2-domain.r2.dev/talkmart/images/profile.jpg", "nullable": true },
                         "bio": { "type": "string", "example": "Mənim haqqımda qısa məlumat", "nullable": true },
                         "createdAt": { "type": "string", "format": "date-time" },
                         "updatedAt": { "type": "string", "format": "date-time" }
@@ -435,7 +435,7 @@ export default {
                         "email": { "type": "string", "example": "cemile@example.com" },
                         "phone": { "type": "string", "example": "+994501234567" },
                         "emailVerified": { "type": "boolean", "example": true },
-                        "profileImage": { "type": "string", "example": "https://res.cloudinary.com/.../profile.jpg", "nullable": true },
+                        "profileImage": { "type": "string", "example": "https://your-r2-domain.r2.dev/talkmart/images/profile.jpg", "nullable": true },
                         "providerProfile": {
                           "type": "object",
                           "properties": {
@@ -478,7 +478,7 @@ export default {
                   "email": { "type": "string", "format": "email", "example": "sirket@example.com" },
                   "bio": { "type": "string", "example": "Xidmətlərimizi daha sərfəli və keyfiyyətli etdik. (Bioqrafiya)" },
                   "location": { "type": "string", "example": "Gəncə, Azərbaycan" },
-                  "profileImage": { "type": "string", "example": "https://res.cloudinary.com/.../profile.jpg", "nullable": true, "description": "Profil şəkli URL-i" }
+                  "profileImage": { "type": "string", "example": "https://your-r2-domain.r2.dev/talkmart/images/profile.jpg", "nullable": true, "description": "Profil şəkli URL-i" }
                 }
               }
             }
@@ -497,7 +497,7 @@ export default {
     "/users/profile-image": {
       "delete": {
         "summary": "Profil şəklini sil",
-        "description": "🔐 **LOGIN TƏLƏB OLUNUR** — Həm User, həm Provider istifadə edə bilər. Cloudinary-dən silinir və DB-dən təmizlənir.",
+        "description": "🔐 **LOGIN TƏLƏB OLUNUR** — Həm User, həm Provider istifadə edə bilər. R2-dən silinir və DB-dən təmizlənir.",
         "tags": ["User"],
         "security": [{ "bearerAuth": [] }],
         "responses": {
@@ -548,8 +548,8 @@ export default {
                           "title": { "type": "string", "example": "Peşəkar Santexnika Xidməti" },
                           "description": { "type": "string", "example": "Boru təmiri və su xətləri." },
                           "price": { "type": "number", "example": 50.5 },
-                          "videoUrl": { "type": "string", "example": "https://res.cloudinary.com/.../video.mp4" },
-                          "thumbnail": { "type": "string", "example": "https://res.cloudinary.com/.../thumb.jpg" },
+                          "videoUrl": { "type": "string", "example": "https://your-r2-domain.r2.dev/talkmart/videos/video.mp4" },
+                          "thumbnail": { "type": "string", "example": "https://your-r2-domain.r2.dev/talkmart/thumbnails/thumb.jpg" },
                           "categoryId": { "type": "string", "example": "64efc9abc1234567890abc01" },
                           "duration": { "type": "number", "example": 30 },
                           "likeCount": { "type": "integer", "example": 42 },
@@ -564,7 +564,7 @@ export default {
                               "companyName": { "type": "string", "example": "Cəmilə Təmizlik", "nullable": true },
                               "phone": { "type": "string", "example": "+994501234567", "description": "Providerin əlaqə nömrəsi" },
                               "address": { "type": "string", "example": "Neftçilər pr, 12, Bakı", "nullable": true, "description": "Providerin ünvanı" },
-                              "profileImage": { "type": "string", "example": "https://res.cloudinary.com/demo/image/upload/v157097/profile.jpg", "nullable": true, "description": "Providerin profil şəkli" }
+                              "profileImage": { "type": "string", "example": "https://your-r2-domain.r2.dev/talkmart/images/profile.jpg", "nullable": true, "description": "Providerin profil şəkli" }
                             }
                           },
                           "isLiked": { "type": "boolean", "description": "Cari istifadəçi bu videonu bəyənibmi. Guest üçün həmişə false.", "example": true },
@@ -619,8 +619,8 @@ export default {
                           "title": { "type": "string", "example": "Peşəkar Santexnika Xidməti" },
                           "description": { "type": "string", "example": "Boru təmiri və su xətləri." },
                           "price": { "type": "number", "example": 50.5 },
-                          "videoUrl": { "type": "string", "example": "https://res.cloudinary.com/.../video.mp4" },
-                          "thumbnail": { "type": "string", "example": "https://res.cloudinary.com/.../thumb.jpg" },
+                          "videoUrl": { "type": "string", "example": "https://your-r2-domain.r2.dev/talkmart/videos/video.mp4" },
+                          "thumbnail": { "type": "string", "example": "https://your-r2-domain.r2.dev/talkmart/thumbnails/thumb.jpg" },
                           "categoryId": { "type": "string", "example": "64efc9abc1234567890abc01" },
                           "duration": { "type": "number", "example": 30 },
                           "likeCount": { "type": "integer", "example": 42 },
@@ -635,7 +635,7 @@ export default {
                               "companyName": { "type": "string", "example": "Cəmilə Təmizlik", "nullable": true },
                               "phone": { "type": "string", "example": "+994501234567", "description": "Providerin əlaqə nömrəsi" },
                               "address": { "type": "string", "example": "Neftçilər pr, 12, Bakı", "nullable": true, "description": "Providerin ünvanı" },
-                              "profileImage": { "type": "string", "example": "https://res.cloudinary.com/demo/image/upload/v157097/profile.jpg", "nullable": true, "description": "Providerin profil şəkli" }
+                              "profileImage": { "type": "string", "example": "https://your-r2-domain.r2.dev/talkmart/images/profile.jpg", "nullable": true, "description": "Providerin profil şəkli" }
                             }
                           },
                           "isLiked": { "type": "boolean", "description": "Cari istifadəçi bu videonu bəyənibmi. Guest üçün həmişə false.", "example": true },
@@ -807,7 +807,7 @@ export default {
           }
         },
         "responses": {
-          "201": { "description": "Video uğurla Cloudinary-yə yükləndi və bazada yadda saxlanıldı." },
+          "201": { "description": "Video uğurla R2-yə yükləndi və bazada yadda saxlanıldı." },
           "400": { "description": "Validasiya xətası, əskik məlumatlar və ya keçərsiz fayl." },
           "401": { "description": "İcazəsiz (Token əskikdir və ya keçərsizdir)" },
           "403": { "description": "Qadağan edilib (İstifadəçi Provider deyil)" }
@@ -838,7 +838,7 @@ export default {
           }
         ],
         "responses": {
-          "200": { "description": "Video uğurla həm MDB (baza), həm də Cloudinary-dən silindi." },
+          "200": { "description": "Video uğurla həm MDB (baza), həm də R2-dən silindi." },
           "401": { "description": "İcazəsiz" },
           "403": { "description": "Qadağan edilib (Provider deyil)" },
           "404": { "description": "Video tapılmadı və ya sizə aid deyil." }
@@ -1251,7 +1251,7 @@ export default {
     "/admin/users/{id}": {
       "delete": {
         "summary": "İstifadəçini sil (Admin paneli)",
-        "description": "Admin seçilmiş istifadəçi hesabını sistemdən tamamilə silir. Cloudinary-dəki profil şəkli də silinir. Admin hesabları silinə bilməz.",
+        "description": "Admin seçilmiş istifadəçi hesabını sistemdən tamamilə silir. R2-dəki profil şəkli də silinir. Admin hesabları silinə bilməz.",
         "tags": ["Admin/Users"],
         "security": [{ "bearerAuth": [] }],
         "parameters": [

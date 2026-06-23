@@ -33,7 +33,7 @@ const UserSchema = new mongoose.Schema(
     // user-də null, provider-də object
     providerProfile: { type: ProviderProfileSchema, default: null },
 
-    // Profil şəkli (Cloudinary URL)
+    // Profil şəkli (R2 URL)
     profileImage: { type: String, default: null },
     profileImagePublicId: { type: String, default: null },
 

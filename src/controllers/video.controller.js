@@ -1,10 +1,12 @@
 import mongoose from "mongoose";
 import Video from "../models/Video.js";
-import cloudinary from "../config/cloudinary.js";
+import path from "path";
 import {
   VideoLike,
   VideoSave,
 } from "../models/VideoInteraction.js";
+import { uploadToR2, deleteFromR2 } from "../services/r2Upload.service.js";
+import { compressVideo } from "../services/compress.service.js";
 
 // POST /api/videos/upload
 export const createVideo = async (req, res) => {
@@ -16,8 +18,6 @@ export const createVideo = async (req, res) => {
     const { description, price, title, categoryId } = req.body;
 
     if (!categoryId) {
-      // Əgər file Cloudinary-yə artıq yüklənibsə və validasiya keçmədisə, onu silə bilərik, amma multer limitsiz buraxır hələlik.
-      // Profilaktik olaraq ən pisi zibillik saxlayacaq publicId ilə.
       return res.status(400).json({ error: "MISSING_CATEGORY", message: "Kateqoriya seçimi tələb olunur." });
     }
 
@@ -34,14 +34,27 @@ export const createVideo = async (req, res) => {
       return res.status(400).json({ error: "INVALID_PRICE", message: "Qiymət düzgün deyil." });
     }
 
-    // Cloudinary-dən gələn URL və public_id
-    const videoUrl = req.file.path;
-    const publicId = req.file.filename;
+    // Video faylının uzantısını təyin et
+    const originalExt = path.extname(req.file.originalname).toLowerCase() || ".mp4";
+    const originalSize = req.file.buffer.length;
 
-    // Thumbnail URL (cloudinary eager transformation-dan)
-    const thumbnail =
-      req.file.eager?.[0]?.secure_url ||
-      `https://res.cloudinary.com/${process.env.CLOUDINARY_CLOUD_NAME}/video/upload/f_jpg,w_400/${publicId}.jpg`;
+    // ✅ Video sıxışdırma (H.264, CRF 23 — göz fərq etmir, ölçü ~50% azalır)
+    const compressed = await compressVideo(req.file.buffer, originalExt);
+    const compressedSize = compressed.buffer.length;
+    const savedPercent = ((1 - compressedSize / originalSize) * 100).toFixed(1);
+    console.log(`📦 Video sıxışdırma: ${(originalSize / 1024 / 1024).toFixed(2)}MB → ${(compressedSize / 1024 / 1024).toFixed(2)}MB (${savedPercent}% azalma)`);
+
+    // R2-yə sıxışdırılmış video yüklə
+    const { key: videoKey, url: videoUrl } = await uploadToR2(
+      compressed.buffer,
+      "talkmart/videos",
+      compressed.mimetype,
+      compressed.ext
+    );
+
+    // Thumbnail — R2-də video URL-indən frame göstərmək mümkün deyil,
+    // ona görə boş saxlayırıq (mobil tərəfdə ilk frame istifadə oluna bilər)
+    const thumbnail = "";
 
     const video = await Video.create({
       providerId: req.user._id,
@@ -50,9 +63,9 @@ export const createVideo = async (req, res) => {
       description: description.trim(),
       price: parsedPrice,
       videoUrl,
-      publicId,
+      publicId: videoKey, // R2 key saxlanılır (silmək üçün)
       thumbnail,
-      duration: req.file.duration || 0,
+      duration: 0,
     });
 
     return res.status(201).json({
@@ -62,7 +75,6 @@ export const createVideo = async (req, res) => {
     });
   } catch (err) {
     console.error("createVideo error:", err);
-    // Cloudinary və ya digər infrastruktur xətaları
     if (err.name === "TimeoutError" || err.message.includes("timeout")) {
       return res.status(408).json({ error: "NETWORK_ERROR", message: "Bağlantı zaman aşımına uğradı." });
     }
@@ -100,10 +112,20 @@ export const deleteVideo = async (req, res) => {
       return res.status(404).json({ message: "Video tapılmadı." });
     }
 
-    // Cloudinary-dən sil
-    await cloudinary.uploader.destroy(video.publicId, {
-      resource_type: "video",
-    });
+    // R2-dən video faylını sil
+    await deleteFromR2(video.publicId);
+
+    // Əgər thumbnail varsa onu da sil
+    if (video.thumbnail) {
+      // Thumbnail key-ni URL-dən çıxar
+      try {
+        const thumbUrl = new URL(video.thumbnail);
+        const thumbKey = thumbUrl.pathname.replace(/^\//, "");
+        await deleteFromR2(thumbKey);
+      } catch (_) {
+        // thumbnail URL parse olunmazsa keç
+      }
+    }
 
     await video.deleteOne();
 
@@ -406,4 +428,3 @@ export const getExploreVideos = async (req, res) => {
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
   }
 };
-

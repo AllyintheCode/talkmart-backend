@@ -2,7 +2,9 @@ import Onboarding from "../models/Onboarding.js";
 import Category from "../models/Category.js";
 import User from "../models/User.js";
 import Video from "../models/Video.js";
-import cloudinary from "../config/cloudinary.js";
+import path from "path";
+import { uploadToR2, deleteFromR2 } from "../services/r2Upload.service.js";
+import { compressImage } from "../services/compress.service.js";
 
 // ============================
 // DASHBOARD STATİSTİKALARI (ADMIN)
@@ -193,19 +195,24 @@ export const createOnboarding = async (req, res) => {
     const { title, description, order } = req.body;
 
     if (!title || !description) {
-      // Əgər Cloudinary-yə yüklənmişdisə və xəta oldusa faylı silək
-      if (req.file.filename) {
-        await cloudinary.uploader.destroy(req.file.filename);
-      }
       return res.status(400).json({ error: "MISSING_FIELDS", message: "Başlıq və açıqlama tələb olunur." });
     }
+
+    // R2-yə şəkil yüklə
+    const originalSize = req.file.buffer.length;
+    const compressed = await compressImage(req.file.buffer);
+    const compressedSize = compressed.buffer.length;
+    const savedPercent = ((1 - compressedSize / originalSize) * 100).toFixed(1);
+    console.log(`🖼️ Onboarding şəkil sıxışdırma: ${(originalSize / 1024).toFixed(2)}KB → ${(compressedSize / 1024).toFixed(2)}KB (${savedPercent}% azalma)`);
+
+    const { key, url } = await uploadToR2(compressed.buffer, "talkmart/onboarding", compressed.mimetype, compressed.ext);
 
     const newScreen = await Onboarding.create({
       title,
       description,
       order: order ? parseInt(order) : 0,
-      image: req.file.path, // Cloudinary secure_url
-      publicId: req.file.filename,
+      image: url,       // R2 public URL
+      publicId: key,    // R2 key (silmək üçün)
     });
 
     return res.status(201).json({ success: true, message: "Onboarding ekranı yaradıldı.", screen: newScreen });
@@ -228,12 +235,19 @@ export const updateOnboarding = async (req, res) => {
 
     // Əgər yeni şəkil göndərilibsə
     if (req.file) {
-      // Köhnə şəkli silirik
-      await cloudinary.uploader.destroy(screen.publicId);
+      // Köhnə şəkli R2-dən silirik
+      await deleteFromR2(screen.publicId);
       
-      // Yeni şəkli mənimsədirik
-      screen.image = req.file.path;
-      screen.publicId = req.file.filename;
+      // Yeni şəkli R2-yə yükləyirik
+      const originalSize = req.file.buffer.length;
+      const compressed = await compressImage(req.file.buffer);
+      const compressedSize = compressed.buffer.length;
+      const savedPercent = ((1 - compressedSize / originalSize) * 100).toFixed(1);
+      console.log(`🖼️ Onboarding şəkil sıxışdırma: ${(originalSize / 1024).toFixed(2)}KB → ${(compressedSize / 1024).toFixed(2)}KB (${savedPercent}% azalma)`);
+
+      const { key, url } = await uploadToR2(compressed.buffer, "talkmart/onboarding", compressed.mimetype, compressed.ext);
+      screen.image = url;
+      screen.publicId = key;
     }
 
     if (title) screen.title = title;
@@ -259,8 +273,8 @@ export const deleteOnboarding = async (req, res) => {
       return res.status(404).json({ error: "NOT_FOUND", message: "Ekran tapılmadı." });
     }
 
-    // Cloudinary-dən şəkli silirik
-    await cloudinary.uploader.destroy(screen.publicId);
+    // R2-dən şəkli silirik
+    await deleteFromR2(screen.publicId);
 
     // Bazadan silirik
     await screen.deleteOne();
@@ -376,12 +390,12 @@ export const deleteUser = async (req, res) => {
       return res.status(403).json({ error: "FORBIDDEN", message: "Admin hesabını silmək mümkün deyil." });
     }
 
-    // Əgər Cloudinary-də profil şəkli varsa, onu da sil
+    // Əgər R2-də profil şəkli varsa, onu da sil
     if (user.profileImagePublicId) {
       try {
-        await cloudinary.uploader.destroy(user.profileImagePublicId, { resource_type: "image" });
-      } catch (cloudErr) {
-        console.warn("Cloudinary profil şəkli silinərkən xəta:", cloudErr.message);
+        await deleteFromR2(user.profileImagePublicId);
+      } catch (r2Err) {
+        console.warn("R2 profil şəkli silinərkən xəta:", r2Err.message);
       }
     }
 

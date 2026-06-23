@@ -1,9 +1,11 @@
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
-import cloudinary from "../config/cloudinary.js";
 import crypto from "crypto";
+import path from "path";
 import Otp from "../models/Otp.js";
 import { sendEmailOtp } from "../utils/email.js";
+import { uploadToR2, deleteFromR2 } from "../services/r2Upload.service.js";
+import { compressImage } from "../services/compress.service.js";
 
 // checkAndHashPassword funksiyası silinib, çünki şifrə yenilənməsi ayrıca API-də (changePassword) edilir.
 
@@ -99,6 +101,31 @@ export const changePassword = async (req, res) => {
   }
 };
 
+/**
+ * Profil şəklini R2-yə yükləyib user-i yeniləyən köməkçi funksiya
+ * Əvvəlki şəkli R2-dən silir, yenisini yükləyir
+ */
+const handleProfileImageUpload = async (user, file) => {
+  // Köhnə şəkli sil
+  if (user.profileImagePublicId) {
+    try {
+      await deleteFromR2(user.profileImagePublicId);
+    } catch (err) {
+      console.warn("R2 köhnə profil şəkli silinərkən xəta:", err.message);
+    }
+  }
+
+  const originalSize = file.buffer.length;
+  const compressed = await compressImage(file.buffer);
+  const compressedSize = compressed.buffer.length;
+  const savedPercent = ((1 - compressedSize / originalSize) * 100).toFixed(1);
+  console.log(`🖼️ Şəkil sıxışdırma: ${(originalSize / 1024).toFixed(2)}KB → ${(compressedSize / 1024).toFixed(2)}KB (${savedPercent}% azalma)`);
+
+  const { key, url } = await uploadToR2(compressed.buffer, "talkmart/images", compressed.mimetype, compressed.ext);
+  user.profileImage = url;
+  user.profileImagePublicId = key;
+};
+
 // PUT /api/users/user
 // Yalnız asan (adi) istifadəçilərin (User) məlumatlarını yeniləyir
 export const updateUser = async (req, res) => {
@@ -158,11 +185,7 @@ export const updateUser = async (req, res) => {
 
     // Profil şəkli yenilənməsi
     if (req.file) {
-      if (user.profileImagePublicId) {
-        await cloudinary.uploader.destroy(user.profileImagePublicId, { resource_type: "image" });
-      }
-      user.profileImage = req.file.path;
-      user.profileImagePublicId = req.file.filename;
+      await handleProfileImageUpload(user, req.file);
     } else if (req.body.profileImage !== undefined) {
       user.profileImage = req.body.profileImage;
     }
@@ -243,11 +266,7 @@ export const updateUserProfile = async (req, res) => {
 
     // Profil şəkli yenilənməsi
     if (req.file) {
-      if (user.profileImagePublicId) {
-        await cloudinary.uploader.destroy(user.profileImagePublicId, { resource_type: "image" });
-      }
-      user.profileImage = req.file.path;
-      user.profileImagePublicId = req.file.filename;
+      await handleProfileImageUpload(user, req.file);
     } else if (req.body.profileImage !== undefined) {
       user.profileImage = req.body.profileImage;
     }
@@ -335,11 +354,7 @@ export const updateProvider = async (req, res) => {
 
     // Profil şəkli yenilənməsi (Əgər fayl göndərilibsə və ya JSON-da URL gəlibsə)
     if (req.file) {
-      if (user.profileImagePublicId) {
-        await cloudinary.uploader.destroy(user.profileImagePublicId, { resource_type: "image" });
-      }
-      user.profileImage = req.file.path;
-      user.profileImagePublicId = req.file.filename;
+      await handleProfileImageUpload(user, req.file);
     } else if (req.body.profileImage !== undefined) {
       user.profileImage = req.body.profileImage;
     }
@@ -449,8 +464,8 @@ export const deleteProfileImage = async (req, res) => {
       return res.status(400).json({ message: "Profil şəkli mövcud deyil." });
     }
 
-    // Cloudinary-dən sil
-    await cloudinary.uploader.destroy(user.profileImagePublicId, { resource_type: "image" });
+    // R2-dən sil
+    await deleteFromR2(user.profileImagePublicId);
 
     // DB-dən təmizlə
     user.profileImage = null;
@@ -543,4 +558,3 @@ export const verifyEmailChange = async (req, res) => {
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };
-

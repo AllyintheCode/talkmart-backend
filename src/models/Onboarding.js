@@ -14,7 +14,7 @@ const OnboardingSchema = new mongoose.Schema(
     },
     image: {
       type: String,
-      required: true, // Cloudinary secure_url saxlayacağıq
+      required: true, // R2 public URL saxlayacağıq
     },
     publicId: {
       type: String,

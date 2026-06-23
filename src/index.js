@@ -26,7 +26,7 @@ app.use(
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
         "script-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
         "style-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
-        "img-src": ["'self'", "data:", "https://res.cloudinary.com"],
+        "img-src": ["'self'", "data:", "https://*.r2.dev", "https://*.cloudflarestorage.com"],
       },
     },
   })
