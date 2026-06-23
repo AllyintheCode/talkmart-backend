@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getOnboardings, getActiveCategories } from "../controllers/public.controller.js";
+import { getOnboardings, getActiveCategories, getTopCategories } from "../controllers/public.controller.js";
 
 const router = Router();
 
@@ -8,5 +8,8 @@ router.get("/onboarding", getOnboardings);
 
 // GET /api/categories
 router.get("/categories", getActiveCategories);
+
+// GET /api/categories/top
+router.get("/categories/top", getTopCategories);
 
 export default router;
