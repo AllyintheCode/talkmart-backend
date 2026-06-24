@@ -1305,6 +1305,75 @@ export default {
         }
       }
     },
+    "/categories/top": {
+      "get": {
+        "summary": "Ən çox istifadə olunan kateqoriyaları gətir (aktiv video sayına görə)",
+        "description": "Aktiv videoların sayına görə azalan sırada kateqoriyaları qaytarır. Yalnız aktiv kateqoriyalar daxildir.",
+        "tags": ["Public"],
+        "security": [],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10,
+              "minimum": 1,
+              "maximum": 50
+            },
+            "description": "Qaytarılacaq kateqoriya sayı (standart: 10, maks: 50)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Top kateqoriyaların siyahısı",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "count": {
+                      "type": "integer",
+                      "description": "Qaytarılan kateqoriya sayı",
+                      "example": 5
+                    },
+                    "categories": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "categoryId": {
+                            "type": "string",
+                            "description": "Kateqoriyanın ObjectId-si",
+                            "example": "64efc9abc1234567890def12"
+                          },
+                          "name": {
+                            "type": "string",
+                            "description": "Kateqoriyanın adı",
+                            "example": "Təmizlik"
+                          },
+                          "videoCount": {
+                            "type": "integer",
+                            "description": "Bu kateqoriyada aktiv video sayı",
+                            "example": 24
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": { "description": "Server xətası" }
+        }
+      }
+    },
     "/admin/categories": {
       "get": {
         "summary": "Bütün kateqoriyaları gətir (Həm aktiv, həm deaktiv)",
