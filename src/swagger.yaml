@@ -497,6 +497,10 @@ paths:
                   type: string
                   format: binary
                   description: "Profil şəkli faylı (multipart)"
+                companyName:
+                  type: string
+                  example: "Cəmilə Təmizlik"
+                  description: "Şirkət adı (providerProfile.companyName)"
       responses:
         '200':
           description: Provider profili yeniləndi (email dəyişibsə OTP göndərildi).

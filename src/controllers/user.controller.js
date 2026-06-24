@@ -296,7 +296,7 @@ export const updateUserProfile = async (req, res) => {
 export const updateProvider = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { fullName, email, bio, location, phone } = req.body;
+    const { fullName, email, bio, location, phone, companyName } = req.body;
 
     const user = await User.findById(userId);
     let emailVerificationSent = false;
@@ -350,6 +350,7 @@ export const updateProvider = async (req, res) => {
     if (user.providerProfile) {
       if (bio !== undefined) user.providerProfile.about = bio;
       if (location !== undefined) user.providerProfile.location = location;
+      if (companyName !== undefined) user.providerProfile.companyName = companyName;
     }
 
     // Profil şəkli yenilənməsi (Əgər fayl göndərilibsə və ya JSON-da URL gəlibsə)

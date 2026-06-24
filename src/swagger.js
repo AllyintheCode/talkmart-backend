@@ -478,6 +478,7 @@ export default {
                   "email": { "type": "string", "format": "email", "example": "sirket@example.com" },
                   "bio": { "type": "string", "example": "Xidmətlərimizi daha sərfəli və keyfiyyətli etdik. (Bioqrafiya)" },
                   "location": { "type": "string", "example": "Gəncə, Azərbaycan" },
+                  "companyName": { "type": "string", "example": "Cəmilə Təmizlik", "description": "Şirkət adı (providerProfile.companyName)" },
                   "profileImage": { "type": "string", "example": "https://your-r2-domain.r2.dev/talkmart/images/profile.jpg", "nullable": true, "description": "Profil şəkli URL-i" }
                 }
               }
