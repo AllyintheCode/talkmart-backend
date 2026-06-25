@@ -3,6 +3,7 @@ import {
   registerUser,
   registerProvider,
   verifyRegisterOtp,
+  resendRegisterOtp,
   login,
   forgotPassword,
   verifyForgotOtp,
@@ -16,6 +17,7 @@ const router = Router();
 router.post("/register/user", authLimiter, registerUser);
 router.post("/register/provider", authLimiter, registerProvider);
 router.post("/register/verify-otp", authLimiter, verifyRegisterOtp);
+router.post("/register/resend-otp", authLimiter, resendRegisterOtp);
   
 // login (email + password)
 router.post("/login", authLimiter, login);

@@ -135,6 +135,35 @@ paths:
         '429':
           description: Çox sayda uyğun olmayan cəhd
 
+  /auth/register/resend-otp:
+    post:
+      summary: Müddəti bitmiş və ya təsdiqlənməmiş hesablar üçün yeni OTP tələb et
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: "ali@example.com"
+      responses:
+        '200':
+          description: Yeni OTP göndərildi.
+        '400':
+          description: Validasiya xətası və ya hesab artıq təsdiqlənib
+        '404':
+          description: İstifadəçi tapılmadı
+        '429':
+          description: Lütfən 1 dəqiqə gözləyin (Çox tez-tez cəhd)
+        '500':
+          description: Server xətası
+
   /auth/login:
     post:
       summary: İstifadəçi və ya providerin E-poçt & Şifrə ilə daxil olması

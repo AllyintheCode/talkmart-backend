@@ -7,6 +7,7 @@ import Otp from "../models/Otp.js";
 import Category from "../models/Category.js";
 import { sendEmailOtp } from "../utils/email.js";
 import { signAccessToken } from "../utils/jwt.js";
+import mongoose from "mongoose";
 
 const normalizeEmail = (e) =>
   String(e || "")
@@ -39,9 +40,9 @@ async function createOrUpdateOtp({ email, purpose }) {
 /* ---------------- REGISTER (USER) + OTP ---------------- */
 
 const userRegisterSchema = z.object({
-  fullName: z.string().min(2),
-  phone: z.string().min(7),
-  email: z.string().email(),
+  fullName: z.string().trim().min(2),
+  phone: z.string().trim().min(7),
+  email: z.string().trim().email(),
   password: z.string().min(6),
 });
 
@@ -92,13 +93,13 @@ export async function registerUser(req, res) {
 
 const providerRegisterSchema = z
   .object({
-    firstName:       z.string().min(2),
-    lastName:        z.string().min(2),
-    companyName:     z.string().min(2),
-    email:           z.string().email(),
-    phone:           z.string().min(7),
-    categoryId:      z.string().min(1),
-    address:         z.string().min(2),
+    firstName:       z.string().trim().min(2),
+    lastName:        z.string().trim().min(2),
+    companyName:     z.string().trim().min(2),
+    email:           z.string().trim().email(),
+    phone:           z.string().trim().min(7),
+    categoryId:      z.string().trim().min(1),
+    address:         z.string().trim().min(2),
     password:        z.string().min(6),
     confirmPassword: z.string().min(6),
   })
@@ -126,6 +127,11 @@ export async function registerProvider(req, res) {
       return res
         .status(409)
         .json({ error: "Bu email və ya phone artıq qeydiyyatdadır" });
+
+    if (!mongoose.Types.ObjectId.isValid(categoryId))
+      return res
+        .status(400)
+        .json({ error: "Geçərsiz kateqoriya ID formatı" });
 
     // categoryId-nin həqiqətən mövcud və aktiv olduğunu yoxla
     const category = await Category.findOne({ _id: categoryId, status: "active" });
@@ -165,8 +171,8 @@ export async function registerProvider(req, res) {
 /* ---------------- REGISTER VERIFY OTP -> TOKEN ---------------- */
 
 const verifyRegisterOtpSchema = z.object({
-  email: z.string().email(),
-  code: z.string().length(6),
+  email: z.string().trim().email(),
+  code: z.string().trim().length(6),
 });
 
 export async function verifyRegisterOtp(req, res) {
@@ -234,10 +240,45 @@ export async function verifyRegisterOtp(req, res) {
   }
 }
 
+/* ---------------- RESEND REGISTER OTP ---------------- */
+
+const resendOtpSchema = z.object({
+  email: z.string().trim().email(),
+});
+
+export async function resendRegisterOtp(req, res) {
+  try {
+    const parsed = resendOtpSchema.safeParse(req.body);
+    if (!parsed.success)
+      return res
+        .status(400)
+        .json({ error: "Validation error", details: parsed.error.issues });
+
+    const email = normalizeEmail(parsed.data.email);
+    const user = await User.findOne({ email });
+
+    if (!user) return res.status(404).json({ error: "User tapılmadı" });
+    if (user.emailVerified)
+      return res.status(400).json({ error: "Email artıq təsdiqlənib" });
+
+    const lastOtp = await Otp.findOne({ email, purpose: "register" });
+    if (lastOtp && Date.now() - lastOtp.lastSentAt.getTime() < 60000) {
+      return res.status(429).json({ error: "Lütfən 1 dəqiqə gözləyin" });
+    }
+
+    await createOrUpdateOtp({ email, purpose: "register" });
+
+    return res.json({ message: "Yeni OTP göndərildi", email });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "Server xətası" });
+  }
+}
+
 /* ---------------- LOGIN (EMAIL + PASSWORD) ---------------- */
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().email(),
   password: z.string().min(1),
 });
 
@@ -304,7 +345,7 @@ export async function login(req, res) {
 /* ---------------- FORGOT PASSWORD — SEND OTP ---------------- */
 
 const forgotPasswordSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().email(),
 });
 
 export async function forgotPassword(req, res) {
@@ -340,8 +381,8 @@ export async function forgotPassword(req, res) {
 /* ------------- FORGOT PASSWORD — VERIFY OTP → RESET TOKEN ------------- */
 
 const verifyForgotOtpSchema = z.object({
-  email: z.string().email(),
-  code: z.string().length(6),
+  email: z.string().trim().email(),
+  code: z.string().trim().length(6),
 });
 
 export async function verifyForgotOtp(req, res) {
