@@ -28,32 +28,53 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        "script-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
-        "style-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
-        "img-src": ["'self'", "data:", "https://*.r2.dev", "https://*.cloudflarestorage.com"],
+        "script-src": [
+          "'self'",
+          "'unsafe-inline'",
+          "https://cdnjs.cloudflare.com",
+        ],
+        "style-src": [
+          "'self'",
+          "'unsafe-inline'",
+          "https://cdnjs.cloudflare.com",
+        ],
+        "img-src": [
+          "'self'",
+          "data:",
+          "https://*.r2.dev",
+          "https://*.cloudflarestorage.com",
+        ],
       },
     },
-  })
+  }),
 );
 
 // ✅ Global Rate Limiter — Bütün API-ləri bot/DDoS hücumlarından qoruyur
 const globalLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 dəqiqə
-  max: 200,                  // IP-ə 200 sorğu/dəqiqə
+  max: 200, // IP-ə 200 sorğu/dəqiqə
   standardHeaders: true,
   legacyHeaders: false,
-  message: { success: false, message: "Çox sorğu göndərdiniz. Bir az gözləyin." },
+  message: {
+    success: false,
+    message: "Çox sorğu göndərdiniz. Bir az gözləyin.",
+  },
 });
 app.use("/api", globalLimiter);
 
+console.log("JWT", process.env.JWT_SECRET);
+console.log("ENV", process.env);
+
 // CORS — Production-da öz domenini yaz
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS
-    ? process.env.ALLOWED_ORIGINS.split(",")
-    : "*",
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-}));
+app.use(
+  cors({
+    origin: process.env.ALLOWED_ORIGINS
+      ? process.env.ALLOWED_ORIGINS.split(",")
+      : "*",
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
+);
 
 app.use(express.json({ limit: "10kb" })); // ✅ JSON body limit — memory overflow qorunması
 
@@ -69,7 +90,8 @@ app.use("/api/users", userRoutes);
 app.use("/api/admin", adminRoutes);
 
 // Swagger API Docs (Vercel Fix with CDNs)
-const CSS_URL = "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.1.0/swagger-ui.min.css";
+const CSS_URL =
+  "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.1.0/swagger-ui.min.css";
 app.use(
   "/api-docs",
   swaggerUi.serve,
@@ -79,7 +101,7 @@ app.use(
       "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.1.0/swagger-ui-bundle.min.js",
       "https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/4.1.0/swagger-ui-standalone-preset.min.js",
     ],
-  })
+  }),
 );
 
 const PORT = process.env.PORT || 5000;
@@ -87,7 +109,9 @@ const PORT = process.env.PORT || 5000;
 // ✅ JWT_SECRET güc yoxlaması — zəif key ilə server başlamasın
 const JWT_SECRET = process.env.JWT_SECRET || "";
 if (!JWT_SECRET || JWT_SECRET.length < 32) {
-  console.error("❌ FATAL: JWT_SECRET .env-də yoxdur və ya çox qısadır (min 32 simvol). Server dayandırıldı.");
+  console.error(
+    "❌ FATAL: JWT_SECRET .env-də yoxdur və ya çox qısadır (min 32 simvol). Server dayandırıldı.",
+  );
   process.exit(1);
 }
 
