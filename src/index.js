@@ -3,7 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
 import rateLimit from "express-rate-limit";
-import mongoSanitize from "express-mongo-sanitize";
+
 import "dotenv/config";
 import { connectDB } from "./config/db.js";
 import authRoutes from "./routes/auth.routes.js";
@@ -18,9 +18,6 @@ const app = express();
 
 // ✅ GZIP Compression — JSON response-ları ~70% kiçildir
 app.use(compression());
-
-// ✅ NoSQL Injection Protection
-app.use(mongoSanitize());
 
 // Global Security Headers
 app.use(
