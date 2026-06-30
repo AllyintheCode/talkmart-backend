@@ -107,7 +107,7 @@ app.use(
 const PORT = process.env.PORT || 5000;
 
 // ✅ JWT_SECRET güc yoxlaması — zəif key ilə server başlamasın
-const JWT_SECRET = process.env.JWT_SECRET || "";
+const JWT_SECRET = process.env.JWT_SECRET ?? "";
 if (!JWT_SECRET || JWT_SECRET.length < 32) {
   console.error(
     "❌ FATAL: JWT_SECRET .env-də yoxdur və ya çox qısadır (min 32 simvol). Server dayandırıldı.",
