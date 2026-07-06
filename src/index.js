@@ -3,7 +3,6 @@ import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
 import rateLimit from "express-rate-limit";
-
 import "dotenv/config";
 import { connectDB } from "./config/db.js";
 import authRoutes from "./routes/auth.routes.js";

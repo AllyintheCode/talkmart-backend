@@ -6,7 +6,7 @@ import {
   VideoSave,
 } from "../models/VideoInteraction.js";
 import { uploadToR2, deleteFromR2 } from "../services/r2Upload.service.js";
-import { compressVideo } from "../services/compress.service.js";
+import { compressVideo, generateThumbnail } from "../services/compress.service.js";
 
 // POST /api/videos/upload
 export const createVideo = async (req, res) => {
@@ -52,9 +52,22 @@ export const createVideo = async (req, res) => {
       compressed.ext
     );
 
-    // Thumbnail — R2-də video URL-indən frame göstərmək mümkün deyil,
-    // ona görə boş saxlayırıq (mobil tərəfdə ilk frame istifadə oluna bilər)
-    const thumbnail = "";
+    // Thumbnail yaradılması və yüklənməsi
+    let thumbnail = "";
+    try {
+      console.log("📸 Thumbnail yaradılır...");
+      const thumbData = await generateThumbnail(req.file.buffer, originalExt);
+      const { url: thumbnailUrl } = await uploadToR2(
+        thumbData.buffer,
+        "talkmart/thumbnails",
+        thumbData.mimetype,
+        thumbData.ext
+      );
+      thumbnail = thumbnailUrl;
+      console.log("📸 Thumbnail yükləndi:", thumbnail);
+    } catch (err) {
+      console.error("⚠️ Thumbnail yaratmaq alınmadı:", err);
+    }
 
     const video = await Video.create({
       providerId: req.user._id,

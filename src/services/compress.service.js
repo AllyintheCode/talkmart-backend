@@ -91,3 +91,44 @@ export const compressVideo = async (buffer, originalExt = ".mp4") => {
     try { fs.unlinkSync(outputPath); } catch (_) {}
   }
 };
+
+/**
+ * Videodan thumbnail yaradır
+ * - Videonun 1-ci saniyəsindəki frame-i götürür
+ * - Şəkil kimi sıxışdırıb qaytarır
+ *
+ * @param {Buffer} buffer - Video buffer-i
+ * @param {string} originalExt - Fayl uzantısı
+ * @returns {Promise<{ buffer: Buffer, ext: string, mimetype: string }>}
+ */
+export const generateThumbnail = async (buffer, originalExt = ".mp4") => {
+  const tmpId = crypto.randomUUID();
+  const tmpDir = os.tmpdir();
+  const inputPath = path.join(tmpDir, `thumb_in_${tmpId}${originalExt}`);
+  const outputFilename = `thumb_out_${tmpId}.png`;
+  const outputPath = path.join(tmpDir, outputFilename);
+
+  fs.writeFileSync(inputPath, buffer);
+
+  try {
+    await new Promise((resolve, reject) => {
+      ffmpeg(inputPath)
+        .screenshots({
+          timestamps: ["50%"], // Videonun ortası
+          filename: outputFilename,
+          folder: tmpDir,
+          size: "640x?",
+        })
+        .on("end", resolve)
+        .on("error", reject);
+    });
+
+    const thumbnailBuffer = fs.readFileSync(outputPath);
+    
+    // Şəkli sıxışdır
+    return await compressImage(thumbnailBuffer);
+  } finally {
+    try { fs.unlinkSync(inputPath); } catch (_) {}
+    try { fs.unlinkSync(outputPath); } catch (_) {}
+  }
+};
