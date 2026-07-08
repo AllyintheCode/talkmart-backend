@@ -113,14 +113,12 @@ export const generateThumbnail = async (buffer, originalExt = ".mp4") => {
   try {
     await new Promise((resolve, reject) => {
       ffmpeg(inputPath)
-        .screenshots({
-          timestamps: ["50%"], // Videonun ortası
-          filename: outputFilename,
-          folder: tmpDir,
-          size: "640x?",
-        })
+        .seekInput('00:00:00.500') // Videonun 0.5-ci saniyəsi
+        .frames(1)
+        .output(outputPath)
         .on("end", resolve)
-        .on("error", reject);
+        .on("error", reject)
+        .run();
     });
 
     const thumbnailBuffer = fs.readFileSync(outputPath);
