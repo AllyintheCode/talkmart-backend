@@ -166,7 +166,7 @@ export const updateUser = async (req, res) => {
         { upsert: true }
       );
       
-      await sendEmailOtp(user.email, code, "email_change");
+      await sendEmailOtp(email, code, "email_change");
       emailVerificationSent = true;
     }
 
@@ -199,7 +199,7 @@ export const updateUser = async (req, res) => {
     return res.json({
       success: true,
       message: emailVerificationSent 
-        ? "Profiliniz yeniləndi. Email dəyişikliyi üçün köhnə emailinizə təsdiq kodu göndərildi." 
+        ? "Profiliniz yeniləndi. Email dəyişikliyi üçün yeni emailinizə təsdiq kodu göndərildi." 
         : "İstifadəçi profiliniz uğurla yeniləndi.",
       user: updatedUser,
       requiresEmailVerification: emailVerificationSent,
@@ -249,7 +249,7 @@ export const updateUserProfile = async (req, res) => {
         { upsert: true }
       );
       
-      await sendEmailOtp(user.email, code, "email_change");
+      await sendEmailOtp(email, code, "email_change");
       emailVerificationSent = true;
     }
 
@@ -280,7 +280,7 @@ export const updateUserProfile = async (req, res) => {
     return res.json({
       success: true,
       message: emailVerificationSent 
-        ? "Profiliniz yeniləndi. Email dəyişikliyi üçün köhnə emailinizə təsdiq kodu göndərildi." 
+        ? "Profiliniz yeniləndi. Email dəyişikliyi üçün yeni emailinizə təsdiq kodu göndərildi." 
         : "İstifadəçi profiliniz uğurla yeniləndi.",
       user: updatedUser,
       requiresEmailVerification: emailVerificationSent,
@@ -330,7 +330,7 @@ export const updateProvider = async (req, res) => {
         { upsert: true }
       );
       
-      await sendEmailOtp(user.email, code, "email_change");
+      await sendEmailOtp(email, code, "email_change");
       emailVerificationSent = true;
     }
 
@@ -369,7 +369,7 @@ export const updateProvider = async (req, res) => {
     return res.json({
       success: true,
       message: emailVerificationSent 
-        ? "Profiliniz yeniləndi. Email dəyişikliyi üçün köhnə emailinizə təsdiq kodu göndərildi." 
+        ? "Profiliniz yeniləndi. Email dəyişikliyi üçün yeni emailinizə təsdiq kodu göndərildi." 
         : "Provider profiliniz uğurla yeniləndi.",
       user: updatedUser,
       requiresEmailVerification: emailVerificationSent,

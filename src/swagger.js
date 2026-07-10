@@ -327,6 +327,7 @@ export default {
       },
       "put": {
         "summary": "Yalnız adi istifadəçi (User) məlumatlarını yenilə",
+        "description": "Əgər email dəyişdirilərsə, təsdiq üçün yeni email ünvanına OTP kodu göndəriləcək.",
         "tags": ["User"],
         "security": [
           {
@@ -350,7 +351,21 @@ export default {
           }
         },
         "responses": {
-          "200": { "description": "İstifadəçi profili uğurla yeniləndi." },
+          "200": {
+            "description": "İstifadəçi profili uğurla yeniləndi.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Profiliniz yeniləndi. Email dəyişikliyi üçün yeni emailinizə təsdiq kodu göndərildi." },
+                    "requiresEmailVerification": { "type": "boolean", "example": true }
+                  }
+                }
+              }
+            }
+          },
           "400": { "description": "Şifrələr eyni deyil və ya validasiya xətası var" },
           "401": { "description": "İcazəsiz (Token əskik və ya keçərsizdir)" },
           "403": { "description": "Provider və ya Admin bu api-dən istifadə edə bilməz" },
@@ -404,6 +419,7 @@ export default {
       },
       "post": {
         "summary": "Adi istifadəçi (User) profilini, bio və şəklini yenilə",
+        "description": "Əgər email dəyişdirilərsə, təsdiq üçün yeni email ünvanına OTP kodu göndəriləcək.",
         "tags": ["User"],
         "security": [
           {
@@ -427,7 +443,21 @@ export default {
           }
         },
         "responses": {
-          "200": { "description": "İstifadəçi profili uğurla yeniləndi." },
+          "200": {
+            "description": "İstifadəçi profili uğurla yeniləndi.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Profiliniz yeniləndi. Email dəyişikliyi üçün yeni emailinizə təsdiq kodu göndərildi." },
+                    "requiresEmailVerification": { "type": "boolean", "example": true }
+                  }
+                }
+              }
+            }
+          },
           "400": { "description": "Validasiya xətası var" },
           "401": { "description": "İcazəsiz (Token əskik və ya keçərsizdir)" },
           "403": { "description": "Provider və ya Admin bu api-dən istifadə edə bilməz" },
@@ -489,6 +519,7 @@ export default {
       },
       "put": {
         "summary": "Yalnız xidmət təminatçısı (Provider) məlumatlarını yenilə",
+        "description": "Əgər email dəyişdirilərsə, təsdiq üçün yeni email ünvanına OTP kodu göndəriləcək.",
         "tags": ["User"],
         "security": [
           {
@@ -514,7 +545,21 @@ export default {
           }
         },
         "responses": {
-          "200": { "description": "Provider profili uğurla yeniləndi." },
+          "200": {
+            "description": "Provider profili uğurla yeniləndi.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Profiliniz yeniləndi. Email dəyişikliyi üçün yeni emailinizə təsdiq kodu göndərildi." },
+                    "requiresEmailVerification": { "type": "boolean", "example": true }
+                  }
+                }
+              }
+            }
+          },
           "400": { "description": "Şifrələr eyni deyil və ya validasiya xətası var" },
           "401": { "description": "İcazəsiz (Token əskik və ya keçərsizdir)" },
           "403": { "description": "İstifadəçi provayder deyil (icazə yoxdur)" },
@@ -546,6 +591,35 @@ export default {
           },
           "400": { "description": "Profil şəkli mövcud deyil" },
           "401": { "description": "Login tələb olunur" }
+        }
+      }
+    },
+    "/users/verify-email-change": {
+      "post": {
+        "summary": "Email dəyişmə təsdiq OTP",
+        "description": "🔐 **LOGIN TƏLƏB OLUNUR** — Profil yenilənməsində göndərilən OTP kodunu təsdiqləyib yeni emailə keçid edir.",
+        "tags": ["User"],
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": { "type": "string", "example": "123456" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Email ünvanı uğurla yeniləndi" },
+          "400": { "description": "OTP kodu daxil edin və ya OTP yanlışdır/vaxtı bitib" },
+          "401": { "description": "Login tələb olunur" },
+          "404": { "description": "İstifadəçi tapılmadı" },
+          "409": { "description": "Bu email artıq başqa bir istifadəçiyə məxsusdur" },
+          "429": { "description": "Çox cəhd edildi" }
         }
       }
     },
