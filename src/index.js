@@ -15,6 +15,9 @@ import swaggerDocument from "./swagger.js";
 
 const app = express();
 
+// Trust proxy ayarı - rate-limit arxasında IP-ləri düzgün oxumaq üçün
+app.set("trust proxy", 1);
+
 // ✅ GZIP Compression — JSON response-ları ~70% kiçildir
 app.use(compression());
 

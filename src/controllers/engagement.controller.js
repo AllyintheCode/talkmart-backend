@@ -62,7 +62,7 @@ export const toggleLike = async (req, res) => {
     const updated = await Video.findByIdAndUpdate(
       videoId,
       { $inc: { likeCount: 1 } },
-      { new: true }
+      { returnDocument: 'after' }
     ).select("likeCount");
 
     return res.json({
@@ -131,7 +131,7 @@ export const toggleSave = async (req, res) => {
     const updated = await Video.findByIdAndUpdate(
       videoId,
       { $inc: { saveCount: 1 } },
-      { new: true }
+      { returnDocument: 'after' }
     ).select("saveCount");
 
     return res.json({
@@ -172,7 +172,7 @@ export const recordView = async (req, res) => {
       const updated = await Video.findByIdAndUpdate(
         videoId,
         { $inc: { viewCount: 1 } },
-        { new: true }
+        { returnDocument: 'after' }
       ).select("viewCount");
 
       return res.json({
@@ -220,7 +220,7 @@ export const recordView = async (req, res) => {
     const updated = await Video.findByIdAndUpdate(
       videoId,
       { $inc: { viewCount: 1 } },
-      { new: true }
+      { returnDocument: 'after' }
     ).select("viewCount");
 
     return res.json({
