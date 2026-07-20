@@ -296,7 +296,7 @@ export const updateUserProfile = async (req, res) => {
 export const updateProvider = async (req, res) => {
   try {
     const userId = req.user._id;
-    const { fullName, email, bio, location, phone, companyName } = req.body;
+    const { fullName, email, bio, location, address, categoryId, phone, companyName, website, instagram, whatsapp } = req.body;
 
     const user = await User.findById(userId);
     let emailVerificationSent = false;
@@ -344,13 +344,17 @@ export const updateProvider = async (req, res) => {
     }
 
     if (fullName !== undefined) user.fullName = fullName;
+    if (bio !== undefined) user.bio = bio;
 
-
-    // Providerin Bio və Location hissəsi ("providerProfile.about" bərabərdir Bio-ya)
+    // Providerin profil məlumatları
     if (user.providerProfile) {
-      if (bio !== undefined) user.providerProfile.about = bio;
-      if (location !== undefined) user.providerProfile.location = location;
       if (companyName !== undefined) user.providerProfile.companyName = companyName;
+      if (location !== undefined) user.providerProfile.location = location;
+      if (address !== undefined) user.providerProfile.address = address;
+      if (categoryId !== undefined) user.providerProfile.categoryId = categoryId;
+      if (website !== undefined) user.providerProfile.website = website;
+      if (instagram !== undefined) user.providerProfile.instagram = instagram;
+      if (whatsapp !== undefined) user.providerProfile.whatsapp = whatsapp;
     }
 
     // Profil şəkli yenilənməsi (Əgər fayl göndərilibsə və ya JSON-da URL gəlibsə)

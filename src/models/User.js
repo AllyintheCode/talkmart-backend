@@ -5,6 +5,10 @@ const ProviderProfileSchema = new mongoose.Schema(
     companyName:      { type: String, trim: true },
     categoryId:       { type: String, trim: true },   // Seçilmiş kateqoriya ID-si
     address:          { type: String, trim: true },   // İstifadəçinin ənvanı
+    location:         { type: String, trim: true },
+    website:          { type: String, trim: true },
+    instagram:        { type: String, trim: true },
+    whatsapp:         { type: String, trim: true },
     verified:         { type: Boolean, default: false },
   },
   { _id: false },
