@@ -59,11 +59,18 @@ export async function registerUser(req, res) {
     const phone = normalizePhone(parsed.data.phone);
     const hashedPassword = await bcrypt.hash(parsed.data.password, 10);
 
-    const exists = await User.findOne({ $or: [{ email }, { phone }] });
-    if (exists)
-      return res
-        .status(409)
-        .json({ error: "Bu email və ya phone artıq qeydiyyatdadır" });
+    const existsList = await User.find({ $or: [{ email }, { phone }] });
+    for (const user of existsList) {
+      if (user.emailVerified) {
+        return res.status(409).json({ error: "Bu email və ya telefon nömrəsi artıq qeydiyyatdadır" });
+      }
+    }
+    
+    // Əgər təsdiqlənməyibsə, əvvəlki natamam qeydiyyatı və OTP-ləri silirik
+    for (const user of existsList) {
+      await Otp.deleteMany({ email: user.email, purpose: "register" });
+    }
+    await User.deleteMany({ $or: [{ email }, { phone }], emailVerified: false });
 
     await User.create({
       role: "user",
@@ -122,11 +129,18 @@ export async function registerProvider(req, res) {
     const fullName = `${firstName.trim()} ${lastName.trim()}`;
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    const exists = await User.findOne({ $or: [{ email }, { phone }] });
-    if (exists)
-      return res
-        .status(409)
-        .json({ error: "Bu email və ya phone artıq qeydiyyatdadır" });
+    const existsList = await User.find({ $or: [{ email }, { phone }] });
+    for (const user of existsList) {
+      if (user.emailVerified) {
+        return res.status(409).json({ error: "Bu email və ya telefon nömrəsi artıq qeydiyyatdadır" });
+      }
+    }
+    
+    // Əgər təsdiqlənməyibsə, əvvəlki natamam qeydiyyatı və OTP-ləri silirik
+    for (const user of existsList) {
+      await Otp.deleteMany({ email: user.email, purpose: "register" });
+    }
+    await User.deleteMany({ $or: [{ email }, { phone }], emailVerified: false });
 
     if (!mongoose.Types.ObjectId.isValid(categoryId))
       return res
