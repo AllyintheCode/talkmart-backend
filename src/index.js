@@ -51,7 +51,7 @@ app.use(
 // ✅ Global Rate Limiter — Bütün API-ləri bot/DDoS hücumlarından qoruyur
 const globalLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 dəqiqə
-  max: 200, // IP-ə 200 sorğu/dəqiqə
+  max: 2000, // Test üçün 200-dən 2000-ə qaldırdıq
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -59,7 +59,7 @@ const globalLimiter = rateLimit({
     message: "Çox sorğu göndərdiniz. Bir az gözləyin.",
   },
 });
-app.use("/api", globalLimiter);
+// app.use("/api", globalLimiter); // Gələcəkdə canlı mühit üçün mütləq geri qaytarılmalıdır!
 
 console.log("JWT", process.env.JWT_SECRET);
 console.log("ENV", process.env);
