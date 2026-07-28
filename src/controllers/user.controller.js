@@ -563,3 +563,42 @@ export const verifyEmailChange = async (req, res) => {
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };
+
+// ============================================================
+// DELETE /api/users/account
+// İstifadəçinin öz hesabını silməsi (User + Provider)
+// ============================================================
+export const deleteAccount = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "İstifadəçi tapılmadı." });
+    }
+
+    // Əgər istifadəçinin şəkli varsa, R2-dən sil
+    if (user.profileImagePublicId) {
+      try {
+        await deleteFromR2(user.profileImagePublicId);
+      } catch (err) {
+        console.warn("R2 profil şəkli silinərkən xəta (hesab silinmə):", err.message);
+      }
+    }
+
+    // Otp modelindən istifadəçiyə aid məlumatları təmizlə
+    await Otp.deleteMany({ email: user.email });
+
+    // İstifadəçini sil
+    await User.findByIdAndDelete(userId);
+
+    return res.json({
+      success: true,
+      message: "Hesabınız uğurla silindi.",
+    });
+  } catch (err) {
+    console.error("deleteAccount error:", err);
+    return res.status(500).json({ message: "Server xətası baş verdi." });
+  }
+};
+

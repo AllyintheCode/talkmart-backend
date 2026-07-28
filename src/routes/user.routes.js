@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getUserProfile, getProviderProfile, changePassword, updateUser, updateProvider, getProviderContact, deleteProfileImage, updateUserProfile, verifyEmailChange } from "../controllers/user.controller.js";
+import { getUserProfile, getProviderProfile, changePassword, updateUser, updateProvider, getProviderContact, deleteProfileImage, updateUserProfile, verifyEmailChange, deleteAccount } from "../controllers/user.controller.js";
 import { requireAuth, providerOnly, optionalAuth } from "../middlewares/auth.middleware.js";
 import { uploadImage } from "../middlewares/upload.middleware.js";
 
@@ -71,5 +71,10 @@ router.get("/provider/:id/contact", requireAuth, getProviderContact);
 import { redirectToWhatsapp } from "../controllers/user.controller.js";
 router.get("/provider/:id/whatsapp", optionalAuth, redirectToWhatsapp);
 
+// ============================================================
+// DELETE /api/users/account → İstifadəçinin öz hesabını silməsi
+// requireAuth: guest → LOGIN_REQUIRED
+// ============================================================
+router.delete("/account", requireAuth, deleteAccount);
 
 export default router;
