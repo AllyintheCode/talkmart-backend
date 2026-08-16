@@ -70,7 +70,35 @@ const VideoSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: ["active", "inactive"],
-      default: "active",
+      default: "inactive", // Varsayılan olaraq aktiv deyil, təsdiqlənməlidir
+    },
+
+    moderationStatus: {
+      type: String,
+      enum: ["pending", "approved", "rejected", "review"],
+      default: "pending",
+    },
+
+    // FFMPEG emal statusu
+    processingStatus: {
+      type: String,
+      enum: ["queued", "ready", "failed"],
+      default: "queued",
+    },
+
+    aiFeedback: {
+      type: String,
+      default: "",
+    },
+
+    aiConfidence: {
+      type: Number,
+      default: 0, // 0-100% arası
+    },
+
+    adminFeedback: {
+      type: String,
+      default: "",
     },
   },
   { timestamps: true }
@@ -97,5 +125,8 @@ VideoSchema.index({ providerId: 1, createdAt: -1 });
 
 // Ad/açıqlama üzrə text axtarışı
 VideoSchema.index({ title: "text", description: "text" });
+
+// Moderation filteri
+VideoSchema.index({ moderationStatus: 1, createdAt: -1 });
 
 export default mongoose.models.Video || mongoose.model("Video", VideoSchema);

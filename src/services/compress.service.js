@@ -1,6 +1,7 @@
 import sharp from "sharp";
 import ffmpeg from "fluent-ffmpeg";
 import ffmpegStatic from "ffmpeg-static";
+import ffprobeStatic from "ffprobe-static";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
@@ -8,6 +9,7 @@ import os from "os";
 
 // ffmpeg yolunu təyin et
 ffmpeg.setFfmpegPath(ffmpegStatic);
+ffmpeg.setFfprobePath(ffprobeStatic.path);
 
 // ============================
 // ŞƏKİL SIXIŞDIRMA (sharp)
@@ -130,3 +132,27 @@ export const generateThumbnail = async (buffer, originalExt = ".mp4") => {
     try { fs.unlinkSync(outputPath); } catch (_) {}
   }
 };
+
+/**
+ * Videonun uzunluğunu saniyə ilə qaytarır
+ */
+export const getVideoDuration = async (buffer, originalExt = ".mp4") => {
+  const tmpId = crypto.randomUUID();
+  const tmpDir = os.tmpdir();
+  const inputPath = path.join(tmpDir, `dur_in_${tmpId}${originalExt}`);
+
+  fs.writeFileSync(inputPath, buffer);
+
+  try {
+    const duration = await new Promise((resolve, reject) => {
+      ffmpeg.ffprobe(inputPath, (err, metadata) => {
+        if (err) return reject(err);
+        resolve(metadata.format.duration);
+      });
+    });
+    return duration; // Saniyə ilə
+  } finally {
+    try { fs.unlinkSync(inputPath); } catch (_) {}
+  }
+};
+

@@ -410,3 +410,64 @@ export const deleteUser = async (req, res) => {
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
   }
 };
+
+// ============================
+// VİDEO MODERASİYASI (ADMIN)
+// ============================
+
+// GET /api/admin/videos/moderation
+// Review və ya pending statusunda olan videoları gətir
+export const getVideosForReview = async (req, res) => {
+  try {
+    const videos = await Video.find({ moderationStatus: { $in: ["review", "pending"] } })
+      .populate("providerId", "fullName email")
+      .populate("categoryId", "name")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: videos.length,
+      videos,
+    });
+  } catch (err) {
+    console.error("getVideosForReview error:", err);
+    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
+  }
+};
+
+// PATCH /api/admin/videos/:id/moderate
+// Videonu manual təsdiqlə və ya rədd et
+export const moderateVideo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action, feedback } = req.body; // action: "approve" or "reject"
+
+    const video = await Video.findById(id);
+    if (!video) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Video tapılmadı." });
+    }
+
+    if (action === "approve") {
+      video.moderationStatus = "approved";
+      video.status = "active";
+      video.adminFeedback = feedback || "Admin tərəfindən təsdiqləndi.";
+    } else if (action === "reject") {
+      video.moderationStatus = "rejected";
+      video.status = "inactive";
+      video.adminFeedback = feedback || "Admin tərəfindən rədd edildi.";
+    } else {
+      return res.status(400).json({ error: "INVALID_ACTION", message: "Yalnız 'approve' və ya 'reject' ola bilər." });
+    }
+
+    await video.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Video uğurla ${action === "approve" ? "təsdiqləndi" : "rədd edildi"}.`,
+      video
+    });
+  } catch (err) {
+    console.error("moderateVideo error:", err);
+    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
+  }
+};

@@ -1,12 +1,16 @@
 import mongoose from "mongoose";
 import Video from "../models/Video.js";
 import path from "path";
+import fs from "fs";
+import os from "os";
+import crypto from "crypto";
 import {
   VideoLike,
   VideoSave,
 } from "../models/VideoInteraction.js";
-import { uploadToR2, deleteFromR2 } from "../services/r2Upload.service.js";
-import { compressVideo, generateThumbnail } from "../services/compress.service.js";
+import { deleteFromR2 } from "../services/r2Upload.service.js";
+import { getVideoDuration } from "../services/compress.service.js";
+import { enqueueVideoProcessing, getQueueStats } from "../services/videoProcessing.service.js";
 
 // POST /api/videos/upload
 export const createVideo = async (req, res) => {
@@ -36,60 +40,70 @@ export const createVideo = async (req, res) => {
 
     // Video faylının uzantısını təyin et
     const originalExt = path.extname(req.file.originalname).toLowerCase() || ".mp4";
-    const originalSize = req.file.buffer.length;
 
-    // ✅ Video sıxışdırma (H.264, CRF 23 — göz fərq etmir, ölçü ~50% azalır)
-    const compressed = await compressVideo(req.file.buffer, originalExt);
-    const compressedSize = compressed.buffer.length;
-    const savedPercent = ((1 - compressedSize / originalSize) * 100).toFixed(1);
-    console.log(`📦 Video sıxışdırma: ${(originalSize / 1024 / 1024).toFixed(2)}MB → ${(compressedSize / 1024 / 1024).toFixed(2)}MB (${savedPercent}% azalma)`);
-
-    // R2-yə sıxışdırılmış video yüklə
-    const { key: videoKey, url: videoUrl } = await uploadToR2(
-      compressed.buffer,
-      "talkmart/videos",
-      compressed.mimetype,
-      compressed.ext
-    );
-
-    // Thumbnail yaradılması və yüklənməsi
-    let thumbnail = "";
+    // Videonun uzunluğunu yoxla (Maks 5 dəqiqə = 300 saniyə)
+    // Bu yoxlama seriətdə (request içində) baş verir, təz dir.
     try {
-      console.log("📸 Thumbnail yaradılır...");
-      const thumbData = await generateThumbnail(req.file.buffer, originalExt);
-      const { url: thumbnailUrl } = await uploadToR2(
-        thumbData.buffer,
-        "talkmart/thumbnails",
-        thumbData.mimetype,
-        thumbData.ext
-      );
-      thumbnail = thumbnailUrl;
-      console.log("📸 Thumbnail yükləndi:", thumbnail);
-    } catch (err) {
-      console.error("⚠️ Thumbnail yaratmaq alınmadı:", err);
+      const duration = await getVideoDuration(req.file.buffer, originalExt);
+      if (duration > 300) {
+        return res.status(400).json({ error: "VIDEO_TOO_LONG", message: "Videonun uzunluğu 5 dəqiqədən artıq ola bilməz." });
+      }
+    } catch (durErr) {
+      console.warn("Video uzunluğu yoxlanıla bilmədi:", durErr.message);
     }
 
+    // Raw video buffer-i temp fayla yaz (queue job onu oxuyacaq)
+    const tmpId = crypto.randomUUID();
+    const tempFilePath = path.join(os.tmpdir(), `upload_${tmpId}${originalExt}`);
+    fs.writeFileSync(tempFilePath, req.file.buffer);
+
+    // DB-də placeholder qeyd yarat — videoUrl/publicId hələlik boş, queue dolduracaq
     const video = await Video.create({
       providerId: req.user._id,
       categoryId,
       title: title?.trim() || "",
       description: description.trim(),
       price: parsedPrice,
-      videoUrl,
-      publicId: videoKey, // R2 key saxlanılır (silmək üçün)
-      thumbnail,
+      videoUrl: "",       // arxa planda doldurulacaq
+      publicId: "",       // arxa planda doldurulacaq
+      thumbnail: "",
       duration: 0,
+      moderationStatus: "pending",
+      processingStatus: "queued",   // hələ emal olunmayıb
+      status: "inactive",
     });
+
+    // Ağır əməliyyatları arxa planın queue-suna ver — responseə bir saniyə gözlətmə
+    enqueueVideoProcessing({
+      videoId: video._id,
+      tempFilePath,
+      originalExt,
+    });
+
+    const queueStats = getQueueStats();
 
     return res.status(201).json({
       success: true,
-      message: "Video uğurla yükləndi.",
-      video,
+      message: "Video qəbul edildi, arxa planda emal olunur.",
+      video: {
+        _id: video._id,
+        title: video.title,
+        description: video.description,
+        price: video.price,
+        processingStatus: video.processingStatus,
+        moderationStatus: video.moderationStatus,
+        status: video.status,
+        createdAt: video.createdAt,
+      },
+      queue: {
+        position: queueStats.queued,
+        running: queueStats.running,
+      }
     });
   } catch (err) {
     console.error("createVideo error:", err);
-    if (err.name === "TimeoutError" || err.message.includes("timeout")) {
-      return res.status(408).json({ error: "NETWORK_ERROR", message: "Bağlantı zaman aşımına uğradı." });
+    if (err.name === "TimeoutError" || err.message?.includes("timeout")) {
+      return res.status(408).json({ error: "NETWORK_ERROR", message: "Bağlantı zaman aşımına uğraudı." });
     }
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası baş verdi. Zəhmət olmasa yenidən cəhd edin." });
   }

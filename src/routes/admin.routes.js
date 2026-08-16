@@ -12,6 +12,8 @@ import {
   blockUser,
   unblockUser,
   deleteUser,
+  getVideosForReview,
+  moderateVideo,
 } from "../controllers/admin.controller.js";
 import { verifyToken, adminOnly } from "../middlewares/auth.middleware.js";
 import { uploadImage } from "../middlewares/upload.middleware.js";
@@ -89,5 +91,11 @@ router.put(
 
 // Mövcud Onboarding-i silmə
 router.delete("/onboarding/:id", verifyToken, adminOnly, deleteOnboarding);
+
+// ============================
+// VİDEO MODERASİYASI ROUTE-ları
+// ============================
+router.get("/videos/moderation", verifyToken, adminOnly, getVideosForReview);
+router.patch("/videos/:id/moderate", verifyToken, adminOnly, moderateVideo);
 
 export default router;
