@@ -15,8 +15,8 @@ export const verifyToken = async (req, res, next) => {
     const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // ✅ OPTİMALLAŞDIRMA: DB sorğusu yalnız tam user objecti lazım olduqda
-    const user = await User.findById(decoded.id).select("-password");
+    const userId = decoded.id || decoded._id || decoded.userId;
+    const user = await User.findById(userId).select("-password");
     if (!user) {
       return res.status(401).json({ message: "İstifadəçi tapılmadı." });
     }
