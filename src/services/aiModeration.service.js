@@ -7,15 +7,14 @@ import axios from "axios";
 import Video from "../models/Video.js";
 import PQueue from "p-queue";
 
-const apiKey = process.env.GEMINI_API_KEY;
-
-let genAI = null;
-let fileManager = null;
-
-if (apiKey) {
-  genAI = new GoogleGenerativeAI(apiKey);
-  fileManager = new GoogleAIFileManager(apiKey);
-}
+const getClients = () => {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return { genAI: null, fileManager: null };
+  return {
+    genAI: new GoogleGenerativeAI(key),
+    fileManager: new GoogleAIFileManager(key),
+  };
+};
 
 // Concurrency: Eyni anda maksimum 2 video işlənsin
 const queue = new PQueue({ concurrency: 2 });
@@ -46,6 +45,8 @@ const downloadVideoToTemp = async (url) => {
  * AI Analizi üçün asinxron funksiya
  */
 const processVideoWithAI = async (videoId) => {
+  const { genAI, fileManager } = getClients();
+
   if (!genAI || !fileManager) {
     console.warn("⚠️ GEMINI_API_KEY tapılmadı, AI analizi keçilir.");
     return;
@@ -128,15 +129,27 @@ const processVideoWithAI = async (videoId) => {
       }
     });
 
-    const result = await model.generateContent([
-      {
-        fileData: {
-          mimeType: uploadResult.file.mimeType,
-          fileUri: uploadResult.file.uri
-        }
-      },
-      { text: prompt },
-    ]);
+    let result = null;
+    let generateAttempts = 0;
+    while (generateAttempts < 3) {
+      try {
+        result = await model.generateContent([
+          {
+            fileData: {
+              mimeType: uploadResult.file.mimeType,
+              fileUri: uploadResult.file.uri
+            }
+          },
+          { text: prompt },
+        ]);
+        break;
+      } catch (err) {
+        generateAttempts++;
+        if (generateAttempts >= 3) throw err;
+        console.warn(`⚠️ Gemini API cəhd ${generateAttempts} uğursuz oldu (${err.message}). 2 saniyə sonra yenidən yoxlanılır...`);
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
 
     const responseText = result.response.text();
     const aiData = JSON.parse(responseText);
