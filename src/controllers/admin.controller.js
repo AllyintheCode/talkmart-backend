@@ -449,23 +449,57 @@ export const moderateVideo = async (req, res) => {
 
     if (action === "approve") {
       video.moderationStatus = "approved";
-      video.status = "active";
       video.adminFeedback = feedback || "Admin tərəfindən təsdiqləndi.";
+      // Yalnız FFMPEG emalı tamamlanıbsa aktiv et.
+      // Əgər hələ işlənməyibsə (queued), processVideoJob bitdikdə
+      // moderationStatus="approved" görüb özü status="active" edəcək.
+      if (video.processingStatus === "ready") {
+        video.status = "active";
+      }
+      await video.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "Video uğurla təsdiqləndi.",
+        video,
+      });
+
     } else if (action === "reject") {
-      video.moderationStatus = "rejected";
-      video.status = "inactive";
-      video.adminFeedback = feedback || "Admin tərəfindən rədd edildi.";
+      // ❌ Rədd edildi → Video DB-dən və R2-dən tamamilə silinir, providerin profilindən qaldırılır
+
+      // R2-dən video faylını sil
+      if (video.publicId) {
+        try {
+          await deleteFromR2(video.publicId);
+        } catch (r2Err) {
+          console.warn("R2 video silinərkən xəta (reject):", r2Err.message);
+        }
+      }
+
+      // R2-dən thumbnail-i sil
+      if (video.thumbnail) {
+        try {
+          const thumbUrl = new URL(video.thumbnail);
+          const thumbKey = thumbUrl.pathname.replace(/^\//, "");
+          await deleteFromR2(thumbKey);
+        } catch (thumbErr) {
+          console.warn("R2 thumbnail silinərkən xəta (reject):", thumbErr.message);
+        }
+      }
+
+      // DB-dən tamamilə sil
+      await video.deleteOne();
+
+      return res.status(200).json({
+        success: true,
+        message: "Video rədd edildi və profildən silindi.",
+        deletedVideoId: id,
+      });
+
     } else {
       return res.status(400).json({ error: "INVALID_ACTION", message: "Yalnız 'approve' və ya 'reject' ola bilər." });
     }
 
-    await video.save();
-
-    return res.status(200).json({
-      success: true,
-      message: `Video uğurla ${action === "approve" ? "təsdiqləndi" : "rədd edildi"}.`,
-      video
-    });
   } catch (err) {
     console.error("moderateVideo error:", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });

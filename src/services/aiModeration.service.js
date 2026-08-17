@@ -92,7 +92,7 @@ export const validateVideoContentAI = async ({ tempFilePath, categoryName }) => 
     const prompt = `Sən bir video moderatorusan. Videonu diqqətlə izlə və aşağıdakı sualları cavabla: 1) Videoda hansı xidmət göstərilir? 2) Bu xidmət '${categoryName}' kateqoriyasına uyğundurmu? 3) Uyğunsuz/qadağan olunmuş məzmun varmı? Qərarının səbəbini və əminlik dərəcəni (0-100) mütləq qeyd et.`;
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.0-flash",
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: moderationSchema,
@@ -115,11 +115,18 @@ export const validateVideoContentAI = async ({ tempFilePath, categoryName }) => 
         break;
       } catch (err) {
         generateAttempts++;
+        // Quota aşılıbsa retry etmə, dərhal xəta at
+        const isQuotaError = err.message?.includes("429") || err.message?.includes("quota") || err.message?.includes("Too Many Requests");
+        if (isQuotaError) {
+          console.warn(`⚠️ Gemini API quota limiti aşıldı. Review statusu veriləcək.`);
+          throw err;
+        }
         if (generateAttempts >= 3) throw err;
         console.warn(`⚠️ Gemini API cəhd ${generateAttempts} uğursuz oldu (${err.message}). Yenidən yoxlanılır...`);
         await new Promise((r) => setTimeout(r, 1500));
       }
     }
+
 
     const aiData = JSON.parse(result.response.text());
     console.log("🤖 AI Validasiya Nəticəsi:", aiData);
