@@ -92,7 +92,7 @@ export const validateVideoContentAI = async ({ tempFilePath, categoryName }) => 
     const prompt = `Sən bir video moderatorusan. Videonu diqqətlə izlə və aşağıdakı sualları cavabla: 1) Videoda hansı xidmət göstərilir? 2) Bu xidmət '${categoryName}' kateqoriyasına uyğundurmu? 3) Uyğunsuz/qadağan olunmuş məzmun varmı? Qərarının səbəbini və əminlik dərəcəni (0-100) mütləq qeyd et.`;
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: "gemini-3.6-flash",
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: moderationSchema,
