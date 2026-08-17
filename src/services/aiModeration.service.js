@@ -6,6 +6,7 @@ import os from "os";
 import axios from "axios";
 import Video from "../models/Video.js";
 import PQueue from "p-queue";
+import { deleteFromR2 } from "./r2Upload.service.js";
 
 const getClients = () => {
   const key = process.env.GEMINI_API_KEY;
@@ -170,7 +171,33 @@ const processVideoWithAI = async (videoId) => {
       finalStatus = "approved";
     }
 
-    // 7. DB-ni yenilə
+    // 7. Əgər REJECTED olarsa → video və thumbnail R2-dən və DB-dən tamamilə silinir
+    if (finalStatus === "rejected") {
+      console.log(`🚫 Video REJECTED oldu: ${aiData.reasoning}`);
+
+      // 1. R2-dən video faylını sil
+      if (video.publicId) {
+        await deleteFromR2(video.publicId).catch((err) =>
+          console.warn("R2-dən video silinə bilmədi:", err.message)
+        );
+      }
+
+      // 2. R2-dən thumbnail faylını sil
+      if (video.thumbnail) {
+        try {
+          const thumbUrl = new URL(video.thumbnail);
+          const thumbKey = thumbUrl.pathname.replace(/^\//, "");
+          await deleteFromR2(thumbKey).catch(() => {});
+        } catch (_) {}
+      }
+
+      // 3. Bazadan tamamilə sil
+      await video.deleteOne();
+      console.log(`🗑️ Rejected video R2 və DB-dən tamamilə silindi [Video ID: ${videoId}]`);
+      return;
+    }
+
+    // 8. Əgər APPROVED və ya REVIEW olarsa → DB-ni yenilə
     video.aiFeedback = aiData.reasoning;
     video.aiConfidence = aiData.confidenceScore;
     video.moderationStatus = finalStatus;
