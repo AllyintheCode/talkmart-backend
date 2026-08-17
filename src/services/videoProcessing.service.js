@@ -62,17 +62,19 @@ const processVideoJob = async ({ videoId, tempFilePath, originalExt }) => {
     }
 
     // 5. DB-ni video URL + thumbnail ilə yenilə
-    await Video.findByIdAndUpdate(videoId, {
-      videoUrl,
-      publicId: videoKey,
-      thumbnail,
-      processingStatus: "ready", // emal tamamlandı
-    });
+    const video = await Video.findById(videoId);
+    if (video) {
+      video.videoUrl = videoUrl;
+      video.publicId = videoKey;
+      video.thumbnail = thumbnail;
+      video.processingStatus = "ready";
+      if (video.moderationStatus === "approved") {
+        video.status = "active";
+      }
+      await video.save();
+    }
 
-    console.log(`✅ Video emalı tamamlandı: ${videoId}`);
-
-    // 6. AI növbəsinə göndər
-    analyzeVideoWithAI(videoId);
+    console.log(`✅ Video emalı tamamlandı və qeyd yeniləndi: ${videoId}`);
 
   } catch (err) {
     console.error(`❌ Video emalı xətası [${videoId}]:`, err.message);

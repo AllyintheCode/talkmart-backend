@@ -8,9 +8,11 @@ import {
   VideoLike,
   VideoSave,
 } from "../models/VideoInteraction.js";
+import Category from "../models/Category.js";
 import { deleteFromR2 } from "../services/r2Upload.service.js";
 import { getVideoDuration } from "../services/compress.service.js";
 import { enqueueVideoProcessing, getQueueStats } from "../services/videoProcessing.service.js";
+import { validateVideoContentAI } from "../services/aiModeration.service.js";
 
 // POST /api/videos/upload
 export const createVideo = async (req, res) => {
@@ -52,28 +54,69 @@ export const createVideo = async (req, res) => {
       console.warn("Video uzunluğu yoxlanıla bilmədi:", durErr.message);
     }
 
-    // Raw video buffer-i temp fayla yaz (queue job onu oxuyacaq)
+    // Raw video buffer-i temp fayla yaz (AI və queue üçün)
     const tmpId = crypto.randomUUID();
     const tempFilePath = path.join(os.tmpdir(), `upload_${tmpId}${originalExt}`);
     fs.writeFileSync(tempFilePath, req.file.buffer);
 
-    // DB-də placeholder qeyd yarat — videoUrl/publicId hələlik boş, queue dolduracaq
+    // Kateqoriyanı tap
+    const category = await Category.findById(categoryId);
+    if (!category) {
+      try { if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath); } catch (_) {}
+      return res.status(404).json({ error: "CATEGORY_NOT_FOUND", message: "Seçilmiş kateqoriya tapılmadı." });
+    }
+
+    // 🤖 AI ilə yoxlanış
+    console.log(`🤖 Video yükləmədən öncə AI ilə yoxlanılır (${category.name})...`);
+    let aiCheckResult = { isAllowed: true, finalStatus: "approved", aiData: {} };
+    try {
+      aiCheckResult = await validateVideoContentAI({
+        tempFilePath,
+        categoryName: category.name,
+      });
+    } catch (aiErr) {
+      console.error("AI yoxlama xətası:", aiErr.message);
+      // AI xətası baş versə uploadı dayandırmırıq, baxış üçün review statusu veririk
+      aiCheckResult = {
+        isAllowed: true,
+        finalStatus: "review",
+        aiData: { reasoning: "AI yoxlanışı zamanı xəta oldu, manual baxış üçün qəbul edildi.", confidenceScore: 0 }
+      };
+    }
+
+    // 🚫 Əgər REJECTED olarsa → Dərhal 400 qaytar, BAZAYA VƏ R2-yə YAZMA!
+    if (!aiCheckResult.isAllowed || aiCheckResult.finalStatus === "rejected") {
+      try { if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath); } catch (_) {}
+
+      return res.status(400).json({
+        success: false,
+        error: "VIDEO_REJECTED",
+        message: "Video seçilmiş kateqoriyaya və ya qaydalara uyğun olmadığı üçün qəbul edilmədi.",
+        reason: aiCheckResult.aiData?.reasoning || "Video kateqoriya tələblərinə cavab vermir.",
+        serviceProvided: aiCheckResult.aiData?.serviceProvided || "",
+        confidenceScore: aiCheckResult.aiData?.confidenceScore || 0,
+      });
+    }
+
+    // ✅ Əgər TƏSDİQLƏNƏRSƏ (Approved / Review) → DB-də qeyd yarat və FFMPEG queue-suna ver
     const video = await Video.create({
       providerId: req.user._id,
       categoryId,
       title: title?.trim() || "",
       description: description.trim(),
       price: parsedPrice,
-      videoUrl: "",       // arxa planda doldurulacaq
-      publicId: "",       // arxa planda doldurulacaq
+      videoUrl: "",       // FFMPEG bitəndə doldurulacaq
+      publicId: "",       // FFMPEG bitəndə doldurulacaq
       thumbnail: "",
       duration: 0,
-      moderationStatus: "pending",
-      processingStatus: "queued",   // hələ emal olunmayıb
-      status: "inactive",
+      moderationStatus: aiCheckResult.finalStatus,
+      aiFeedback: aiCheckResult.aiData?.reasoning || "",
+      aiConfidence: aiCheckResult.aiData?.confidenceScore || 0,
+      processingStatus: "queued",
+      status: "inactive", // FFMPEG bitəndə approved isə active olacaq
     });
 
-    // Ağır əməliyyatları arxa planın queue-suna ver — responseə bir saniyə gözlətmə
+    // FFMPEG sıxışdırma və R2 upload queue-suna ver
     enqueueVideoProcessing({
       videoId: video._id,
       tempFilePath,
@@ -84,7 +127,7 @@ export const createVideo = async (req, res) => {
 
     return res.status(201).json({
       success: true,
-      message: "Video qəbul edildi, arxa planda emal olunur.",
+      message: "Video təsdiqləndi və qəbul edildi. Arxa planda emal olunur.",
       video: {
         _id: video._id,
         providerId: video.providerId,
