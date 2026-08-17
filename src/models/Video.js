@@ -34,12 +34,12 @@ const VideoSchema = new mongoose.Schema(
 
     videoUrl: {
       type: String,
-      required: true,
+      default: "",
     },
 
     publicId: {
       type: String,
-      required: true,
+      default: "",
     },
 
     thumbnail: {
