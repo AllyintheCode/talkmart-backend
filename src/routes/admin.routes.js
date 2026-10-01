@@ -14,6 +14,9 @@ import {
   deleteUser,
   getVideosForReview,
   moderateVideo,
+  getAllVideos,
+  adminDeleteVideo,
+  adminUpdateVideoStatus,
 } from "../controllers/admin.controller.js";
 import { verifyToken, adminOnly } from "../middlewares/auth.middleware.js";
 import { uploadImage } from "../middlewares/upload.middleware.js";
@@ -93,8 +96,11 @@ router.put(
 router.delete("/onboarding/:id", verifyToken, adminOnly, deleteOnboarding);
 
 // ============================
-// VİDEO MODERASİYASI ROUTE-ları
+// VİDEO İDARƏETMƏSİ ROUTE-ları (ADMIN)
 // ============================
+router.get("/videos", verifyToken, adminOnly, getAllVideos);
+router.delete("/videos/:id", verifyToken, adminOnly, adminDeleteVideo);
+router.patch("/videos/:id/status", verifyToken, adminOnly, adminUpdateVideoStatus);
 router.get("/videos/moderation", verifyToken, adminOnly, getVideosForReview);
 router.patch("/videos/:id/moderate", verifyToken, adminOnly, moderateVideo);
 

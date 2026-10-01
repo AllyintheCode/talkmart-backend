@@ -623,6 +623,33 @@ export default {
         }
       }
     },
+    "/users/account": {
+      "delete": {
+        "summary": "Hesabı sil (User və ya Provider)",
+        "description": "🔐 **LOGIN TƏLƏB OLUNUR** — İstifadəçinin (və ya xidmət təminatçısının) öz hesabını silməsi. Bu əməliyyat hesabı, profil şəklini və OTP-ləri silir.",
+        "tags": ["User"],
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": { 
+            "description": "Hesab uğurla silindi",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": { "type": "boolean", "example": true },
+                    "message": { "type": "string", "example": "Hesabınız uğurla silindi." }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Login tələb olunur" },
+          "404": { "description": "İstifadəçi tapılmadı" },
+          "500": { "description": "Server xətası" }
+        }
+      }
+    },
     "/videos/feed": {
       "get": {
         "summary": "Ana Səhifə (Reels) üçün sonsuz təsadüfi/trend videolar (TikTok tərzi)",

@@ -226,9 +226,25 @@ export const getFeedVideos = async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
     const userId = req.user?._id || null;
+    let blockedIds = [];
+
+    if (userId) {
+      const User = (await import("../models/User.js")).default;
+      const currentUser = await User.findById(userId);
+      const blockers = await User.find({ blockedUsers: userId }).select("_id");
+      blockedIds = [
+        ...(currentUser?.blockedUsers || []),
+        ...blockers.map(b => b._id)
+      ];
+    }
+
+    const matchStage = { status: "active" };
+    if (blockedIds.length > 0) {
+      matchStage.providerId = { $nin: blockedIds };
+    }
 
     const pipeline = [
-      { $match: { status: "active" } },
+      { $match: matchStage },
       { $sample: { size: limit } },
       // Provider məlumatları — fullName, companyName, phone
       {
@@ -343,7 +359,22 @@ export const getExploreVideos = async (req, res) => {
 
     const { categoryId, search, sort, location, minPrice, maxPrice } = req.query;
 
+    let blockedIds = [];
+    if (userId) {
+      const User = (await import("../models/User.js")).default;
+      const currentUser = await User.findById(userId);
+      const blockers = await User.find({ blockedUsers: userId }).select("_id");
+      blockedIds = [
+        ...(currentUser?.blockedUsers || []),
+        ...blockers.map(b => b._id)
+      ];
+    }
+
     const matchStage = { status: "active" };
+    if (blockedIds.length > 0) {
+      matchStage.providerId = { $nin: blockedIds };
+    }
+
 
     // Kateqoriya filteri
     if (categoryId) {

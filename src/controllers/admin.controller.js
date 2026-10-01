@@ -435,6 +435,138 @@ export const getVideosForReview = async (req, res) => {
   }
 };
 
+// ============================
+// VİDEO İDARƏETMƏSİ (ADMIN) — Tam siyahı, silmə, status dəyişmə
+// ============================
+
+// GET /api/admin/videos
+// Bütün videoları gətir — filter (status, moderationStatus, search), pagination
+export const getAllVideos = async (req, res) => {
+  try {
+    const page   = parseInt(req.query.page)  || 1;
+    const limit  = parseInt(req.query.limit) || 20;
+    const skip   = (page - 1) * limit;
+
+    const { status, moderationStatus, processingStatus, search } = req.query;
+
+    const filter = {};
+    if (status)            filter.status            = status;
+    if (moderationStatus)  filter.moderationStatus  = moderationStatus;
+    if (processingStatus)  filter.processingStatus  = processingStatus;
+
+    if (search) {
+      const safe  = String(search).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regex = new RegExp(safe, "i");
+      filter.$or  = [{ title: regex }, { description: regex }];
+    }
+
+    const [videos, total] = await Promise.all([
+      Video.find(filter)
+        .populate("providerId", "fullName email phone")
+        .populate("categoryId", "name")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Video.countDocuments(filter),
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      total,
+      page,
+      totalPages: Math.ceil(total / limit),
+      count: videos.length,
+      videos,
+    });
+  } catch (err) {
+    console.error("getAllVideos error:", err);
+    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
+  }
+};
+
+// DELETE /api/admin/videos/:id
+// İstənilən videonu admin tərəfindən sil (R2 + thumbnail + DB)
+export const adminDeleteVideo = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const video = await Video.findById(id);
+
+    if (!video) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Video tapılmadı." });
+    }
+
+    // R2-dən video faylını sil
+    if (video.publicId) {
+      try {
+        await deleteFromR2(video.publicId);
+      } catch (r2Err) {
+        console.warn("R2 video silinərkən xəta:", r2Err.message);
+      }
+    }
+
+    // R2-dən thumbnail-i sil
+    if (video.thumbnail) {
+      try {
+        const thumbUrl = new URL(video.thumbnail);
+        const thumbKey = thumbUrl.pathname.replace(/^\//, "");
+        await deleteFromR2(thumbKey);
+      } catch (thumbErr) {
+        console.warn("R2 thumbnail silinərkən xəta:", thumbErr.message);
+      }
+    }
+
+    await video.deleteOne();
+
+    return res.status(200).json({
+      success: true,
+      message: "Video uğurla silindi.",
+      deletedVideoId: id,
+    });
+  } catch (err) {
+    console.error("adminDeleteVideo error:", err);
+    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
+  }
+};
+
+// PATCH /api/admin/videos/:id/status
+// Videonun status-unu dəyiş: active ↔ inactive
+export const adminUpdateVideoStatus = async (req, res) => {
+  try {
+    const { id }     = req.params;
+    const { status } = req.body;
+
+    const allowed = ["active", "inactive"];
+    if (!status || !allowed.includes(status)) {
+      return res.status(400).json({
+        error: "INVALID_STATUS",
+        message: "Status yalnız 'active' və ya 'inactive' ola bilər.",
+      });
+    }
+
+    const video = await Video.findById(id);
+    if (!video) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Video tapılmadı." });
+    }
+
+    video.status = status;
+    await video.save();
+
+    return res.status(200).json({
+      success: true,
+      message: `Video statusu '${status}' olaraq yeniləndi.`,
+      video: {
+        _id:    video._id,
+        status: video.status,
+        moderationStatus: video.moderationStatus,
+      },
+    });
+  } catch (err) {
+    console.error("adminUpdateVideoStatus error:", err);
+    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
+  }
+};
+
 // PATCH /api/admin/videos/:id/moderate
 // Videonu manual təsdiqlə və ya rədd et
 export const moderateVideo = async (req, res) => {

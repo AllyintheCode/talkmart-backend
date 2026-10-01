@@ -602,3 +602,89 @@ export const deleteAccount = async (req, res) => {
   }
 };
 
+export const blockUser = async (req, res) => {
+  try {
+    const targetId = req.params.id;
+    const userId = req.user._id;
+
+    if (targetId === userId.toString()) {
+      return res.status(400).json({ message: "Özünüzü bloklaya bilməzsiniz." });
+    }
+
+    const targetUser = await User.findById(targetId);
+    if (!targetUser) {
+      return res.status(404).json({ message: "İstifadəçi tapılmadı." });
+    }
+
+    const user = await User.findById(userId);
+    if (!user.blockedUsers.includes(targetId)) {
+      user.blockedUsers.push(targetId);
+      await user.save();
+
+      // Notify admin
+      const { sendAdminNotification } = await import("../utils/email.js");
+      sendAdminNotification(
+        "İstifadəçi bloklandı", 
+        `İstifadəçi ${user.email} (${user._id}) digər istifadəçini blokladı: ${targetUser.email} (${targetUser._id})`
+      );
+    }
+
+    return res.json({ success: true, message: "İstifadəçi bloklandı." });
+  } catch (err) {
+    console.error("blockUser error:", err);
+    return res.status(500).json({ message: "Server xətası baş verdi." });
+  }
+};
+
+export const unblockUser = async (req, res) => {
+  try {
+    const targetId = req.params.id;
+    const userId = req.user._id;
+
+    const user = await User.findById(userId);
+    user.blockedUsers = user.blockedUsers.filter(id => id.toString() !== targetId);
+    await user.save();
+
+    return res.json({ success: true, message: "İstifadəçinin bloku açıldı." });
+  } catch (err) {
+    console.error("unblockUser error:", err);
+    return res.status(500).json({ message: "Server xətası baş verdi." });
+  }
+};
+
+export const reportContent = async (req, res) => {
+  try {
+    const reporterId = req.user._id;
+    const { reportedUserId, videoId, reason, details } = req.body;
+
+    if (!reason) {
+      return res.status(400).json({ message: "Şikayət səbəbi mütləqdir." });
+    }
+
+    const Report = (await import("../models/Report.js")).default;
+    const report = new Report({
+      reporterId,
+      reportedUserId,
+      videoId,
+      reason,
+      details
+    });
+    await report.save();
+
+    const user = await User.findById(reporterId);
+    
+    // Notify admin
+    const { sendAdminNotification } = await import("../utils/email.js");
+    const targetInfo = reportedUserId ? `İstifadəçi ID: ${reportedUserId}` : videoId ? `Video ID: ${videoId}` : "Bilinmir";
+    sendAdminNotification(
+      "Yeni Şikayət (Report)", 
+      `Şikayət edən: ${user.email} (${user._id})\n\nHədəf: ${targetInfo}\n\nSəbəb: ${reason}\n\nƏlavə məlumat: ${details || "yoxdur"}`
+    );
+
+    return res.json({ success: true, message: "Şikayətiniz qəbul edildi. Təşəkkür edirik." });
+  } catch (err) {
+    console.error("reportContent error:", err);
+    return res.status(500).json({ message: "Server xətası baş verdi." });
+  }
+};
+

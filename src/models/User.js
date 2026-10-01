@@ -46,6 +46,9 @@ const UserSchema = new mongoose.Schema(
 
     // Admin tərəfindən bloklanıbmı?
     isBlocked: { type: Boolean, default: false },
+
+    // İstifadəçinin özünün blokladığı digər istifadəçilər
+    blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   },
   { timestamps: true },
 );

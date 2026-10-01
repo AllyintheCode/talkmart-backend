@@ -667,6 +667,119 @@ paths:
         '429':
           description: Çox cəhd edildi. Yenidən email dəyişmə tələbi göndərin.
 
+  /users/account:
+    delete:
+      summary: Hesabı sil (User və ya Provider)
+      description: |
+        İstifadəçinin (və ya xidmət təminatçısının) öz hesabını silməsi.
+        Bu əməliyyat hesabı, profil şəklini və OTP-ləri silir.
+      tags: [User]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Hesab uğurla silindi
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Hesabınız uğurla silindi."
+        '401':
+          description: İcazəsiz (Token əskik və ya keçərsizdir)
+        '404':
+          description: İstifadəçi tapılmadı
+        '500':
+          description: Server xətası
+
+  /users/block/{id}:
+    post:
+      summary: İstifadeçini blokla
+      description: |
+        Digər istifadəçini (və ya provider-i) bloklamaq.
+        Bloklayan tərəf, bloklanan tərəfin videolarını feed və explore-da görməyəcək.
+        Adminə email bildirişi gedir.
+      tags: [User]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Bloklanacaq istifadəçinin ID-si
+      responses:
+        '200':
+          description: Uğurlu əməliyyat
+        '400':
+          description: Özünüzü bloklaya bilməzsiniz
+        '401':
+          description: Login tələb olunur
+        '404':
+          description: İstifadəçi tapılmadı
+
+  /users/unblock/{id}:
+    post:
+      summary: İstifadeçini blokdan çıxart
+      tags: [User]
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Blokdan çıxarılacaq istifadəçinin ID-si
+      responses:
+        '200':
+          description: Uğurlu əməliyyat
+        '401':
+          description: Login tələb olunur
+
+  /users/report:
+    post:
+      summary: Şikayət etmək (Report)
+      description: |
+        İstifadəçi və ya videonu şikayət etmək üçün.
+        Adminə dərhal email vasitəsilə bildiriş göndərilir.
+      tags: [User]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reportedUserId:
+                  type: string
+                  description: Şikayət edilən istifadəçinin ID-si (isteğe bağlı)
+                videoId:
+                  type: string
+                  description: Şikayət edilən videonun ID-si (isteğe bağlı)
+                reason:
+                  type: string
+                  description: Şikayət səbəbi (məs: "18+ məzmun", "Təhqir")
+                details:
+                  type: string
+                  description: Əlavə məlumat
+      responses:
+        '200':
+          description: Şikayət qəbul edildi
+        '400':
+          description: Şikayət səbəbi mütləqdir
+        '401':
+          description: Login tələb olunur
+
   # ==============================
   #    VIDEO FEED / EXPLORE (BİRLƏŞDİRİLMİŞ API)
   # ==============================

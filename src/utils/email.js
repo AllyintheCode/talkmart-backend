@@ -111,3 +111,18 @@ export async function sendEmailOtp(to, code, purpose = "login") {
     html: htmlTemplate,
   });
 }
+
+export async function sendAdminNotification(subject, text) {
+  const from = process.env.FROM_EMAIL || process.env.SMTP_USER;
+  const to = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
+  try {
+    await transporter.sendMail({
+      from,
+      to,
+      subject: `Talkmart Admin Alert: ${subject}`,
+      text,
+    });
+  } catch (err) {
+    console.error("Failed to send admin notification:", err);
+  }
+}

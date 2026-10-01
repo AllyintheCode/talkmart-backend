@@ -77,4 +77,25 @@ router.get("/provider/:id/whatsapp", optionalAuth, redirectToWhatsapp);
 // ============================================================
 router.delete("/account", requireAuth, deleteAccount);
 
+// ============================================================
+// POST /api/users/block/:id → Digər istifadəçini bloklamaq
+// requireAuth: guest → LOGIN_REQUIRED
+// ============================================================
+import { blockUser, unblockUser } from "../controllers/user.controller.js";
+router.post("/block/:id", requireAuth, blockUser);
+
+// ============================================================
+// POST /api/users/unblock/:id → Blokdan çıxarmaq
+// requireAuth: guest → LOGIN_REQUIRED
+// ============================================================
+router.post("/unblock/:id", requireAuth, unblockUser);
+
+// ============================================================
+// POST /api/users/report → Şikayət etmək (istifadəçi və ya video)
+// requireAuth: guest → LOGIN_REQUIRED
+// ============================================================
+import { reportContent } from "../controllers/user.controller.js";
+router.post("/report", requireAuth, reportContent);
+
 export default router;
+
