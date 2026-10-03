@@ -865,6 +865,11 @@ export default {
                           "type": "boolean",
                           "example": true
                         },
+                        "bio": {
+                          "type": "string",
+                          "example": "Şirkətimiz haqqında qısa məlumat",
+                          "nullable": true
+                        },
                         "profileImage": {
                           "type": "string",
                           "example": "https://your-r2-domain.r2.dev/talkmart/images/profile.jpg",
@@ -931,7 +936,7 @@ export default {
         "requestBody": {
           "required": true,
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
                 "type": "object",
                 "properties": {
@@ -959,9 +964,8 @@ export default {
                   },
                   "profileImage": {
                     "type": "string",
-                    "example": "https://your-r2-domain.r2.dev/talkmart/images/profile.jpg",
-                    "nullable": true,
-                    "description": "Profil şəkli URL-i"
+                    "format": "binary",
+                    "description": "Profil şəkli (fayl)"
                   }
                 }
               }
