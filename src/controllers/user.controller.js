@@ -652,6 +652,22 @@ export const unblockUser = async (req, res) => {
   }
 };
 
+export const getBlockedUsers = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const user = await User.findById(userId).populate("blockedUsers", "fullName email profileImage role");
+
+    if (!user) {
+      return res.status(404).json({ message: "İstifadəçi tapılmadı." });
+    }
+
+    return res.json({ success: true, blockedUsers: user.blockedUsers });
+  } catch (err) {
+    console.error("getBlockedUsers error:", err);
+    return res.status(500).json({ message: "Server xətası baş verdi." });
+  }
+};
+
 export const reportContent = async (req, res) => {
   try {
     const reporterId = req.user._id;

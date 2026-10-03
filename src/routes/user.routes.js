@@ -91,6 +91,12 @@ router.post("/block/:id", requireAuth, blockUser);
 router.post("/unblock/:id", requireAuth, unblockUser);
 
 // ============================================================
+// GET /api/users/blocked → İstifadəçinin (və ya providerin) blokladığı şəxsləri gətir
+// ============================================================
+import { getBlockedUsers } from "../controllers/user.controller.js";
+router.get("/blocked", requireAuth, getBlockedUsers);
+
+// ============================================================
 // POST /api/users/report → Şikayət etmək (istifadəçi və ya video)
 // requireAuth: guest → LOGIN_REQUIRED
 // ============================================================
