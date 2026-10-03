@@ -2320,6 +2320,11 @@ export default {
                           "example": "+994501234567",
                           "nullable": true
                         },
+                        "bio": {
+                          "type": "string",
+                          "example": "Şirkətimiz haqqında qısa məlumat",
+                          "nullable": true
+                        },
                         "companyName": {
                           "type": "string",
                           "example": "Cəmilə Təmizlik",

@@ -392,7 +392,7 @@ export const updateProvider = async (req, res) => {
 export const getProviderContact = async (req, res) => {
   try {
     const provider = await User.findById(req.params.id)
-      .select("fullName email phone role providerProfile")
+      .select("fullName email phone role bio providerProfile")
       .lean();
 
     if (!provider) {
@@ -409,6 +409,7 @@ export const getProviderContact = async (req, res) => {
         fullName:    provider.fullName,
         email:       provider.email,
         phone:       provider.phone   || null,
+        bio:         provider.bio     || null,
         companyName: provider.providerProfile?.companyName || null,
         location:    provider.providerProfile?.location    || null,
         website:     provider.providerProfile?.website     || null,
