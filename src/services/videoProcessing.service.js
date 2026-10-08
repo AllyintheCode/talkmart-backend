@@ -23,8 +23,17 @@ const processVideoJob = async ({ videoId, tempFilePath, originalExt, categoryNam
     // 1. Statusu processing edirik
     await Video.findByIdAndUpdate(videoId, { processingStatus: "processing" });
 
-    // Tapşırıq A: FFMPEG Sıxışdırma + Thumbnail + R2 Yükləmə
-    const uploadTask = (async () => {
+    // Tapşırıq 1: Əvvəlcə Gemini AI Moderasiyası (temp fayl üzərindən)
+    console.log(`🤖 AI analizi başladı: ${videoId}`);
+    const aiCheckResult = await validateVideoContentAI({ tempFilePath, categoryName });
+
+    let videoUrl = "";
+    let publicId = "";
+    let thumbnail = "";
+
+    // Əgər video RƏDD EDİLMƏYİBSƏ, FFMPEG sıxışdırma və R2 yükləməni icra et
+    if (aiCheckResult.finalStatus !== "rejected") {
+      console.log(`✅ AI icazə verdi (${aiCheckResult.finalStatus}). FFMPEG və R2 yükləməsi başlayır...`);
       const rawBuffer = fs.readFileSync(tempFilePath);
       const originalSize = rawBuffer.length;
 
@@ -32,32 +41,27 @@ const processVideoJob = async ({ videoId, tempFilePath, originalExt, categoryNam
       const compressedSize = compressed.buffer.length;
       console.log(`📦 Sıxışdırıldı: ${(originalSize/1024/1024).toFixed(2)}MB -> ${(compressedSize/1024/1024).toFixed(2)}MB [${videoId}]`);
 
-      const { key: videoKey, url: videoUrl } = await uploadToR2(compressed.buffer, "talkmart/videos", compressed.mimetype, compressed.ext);
+      const r2Video = await uploadToR2(compressed.buffer, "talkmart/videos", compressed.mimetype, compressed.ext);
+      videoUrl = r2Video.url;
+      publicId = r2Video.key;
 
-      let thumbnail = "";
       try {
         const thumbData = await generateThumbnail(rawBuffer, originalExt);
-        const { url: thumbnailUrl } = await uploadToR2(thumbData.buffer, "talkmart/thumbnails", thumbData.mimetype, thumbData.ext);
-        thumbnail = thumbnailUrl;
+        const r2Thumb = await uploadToR2(thumbData.buffer, "talkmart/thumbnails", thumbData.mimetype, thumbData.ext);
+        thumbnail = r2Thumb.url;
       } catch (e) {
         console.warn(`⚠️ Thumbnail xətası: ${e.message}`);
       }
-
-      return { videoUrl, publicId: videoKey, thumbnail };
-    })();
-
-    // Tapşırıq B: Gemini AI Moderasiyası (temp fayl üzərindən)
-    const aiTask = validateVideoContentAI({ tempFilePath, categoryName });
-
-    // Hər iki tapşırığı paralel işlədib nəticələrini gözləyirik
-    const [uploadResult, aiCheckResult] = await Promise.all([uploadTask, aiTask]);
+    } else {
+      console.log(`🚫 Video AI tərəfindən rədd edildi! R2 və Thumbnail mərhələləri ləğv olundu. [${videoId}]`);
+    }
 
     // DB-ni yekunlaşdırıb yeniləyirik
     const video = await Video.findById(videoId);
     if (video) {
-      video.videoUrl = uploadResult.videoUrl;
-      video.publicId = uploadResult.publicId;
-      video.thumbnail = uploadResult.thumbnail;
+      video.videoUrl = videoUrl;
+      video.publicId = publicId;
+      video.thumbnail = thumbnail;
       video.processingStatus = "ready";
       
       video.moderationStatus = aiCheckResult.finalStatus;
