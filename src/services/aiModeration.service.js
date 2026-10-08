@@ -92,7 +92,7 @@ export const validateVideoContentAI = async ({ tempFilePath, categoryName }) => 
     const prompt = `Sən bir video moderatorusan. Videonu diqqətlə izlə və aşağıdakı sualları cavabla: 1) Videoda hansı xidmət göstərilir? 2) Bu xidmət '${categoryName}' kateqoriyasına uyğundurmu? 3) Uyğunsuz/qadağan olunmuş məzmun varmı? Qərarının səbəbini və əminlik dərəcəni (0-100) mütləq qeyd et.`;
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-3.6-flash",
+      model: "gemini-3.8-flash",
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: moderationSchema,
@@ -122,8 +122,9 @@ export const validateVideoContentAI = async ({ tempFilePath, categoryName }) => 
           throw err;
         }
         if (generateAttempts >= 3) throw err;
-        console.warn(`⚠️ Gemini API cəhd ${generateAttempts} uğursuz oldu (${err.message}). Yenidən yoxlanılır...`);
-        await new Promise((r) => setTimeout(r, 1500));
+        const delay = generateAttempts * 3000; // 3s, then 6s
+        console.warn(`⚠️ Gemini API cəhd ${generateAttempts} uğursuz oldu (${err.message}). ${delay/1000} saniyə sonra yenidən yoxlanılır...`);
+        await new Promise((r) => setTimeout(r, delay));
       }
     }
 

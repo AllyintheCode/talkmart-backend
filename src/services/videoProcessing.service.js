@@ -76,6 +76,10 @@ const processVideoJob = async ({ videoId, tempFilePath, originalExt }) => {
 
     console.log(`✅ Video emalı tamamlandı və qeyd yeniləndi: ${videoId}`);
 
+    // 6. AI analizi növbəsinə ver (arxa planda yoxlanır)
+    analyzeVideoWithAI(videoId);
+    console.log(`🤖 AI analizi növbəsinə verildi: ${videoId}`);
+
   } catch (err) {
     console.error(`❌ Video emalı xətası [${videoId}]:`, err.message);
     // Emal alınmasa → processing_failed statusu
