@@ -114,7 +114,10 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
   process.exit(1);
 }
 
-connectDB().then(() => {
+import { recoverStuckVideos } from "./services/videoProcessing.service.js";
+
+connectDB().then(async () => {
+  await recoverStuckVideos();
   app.listen(PORT, () => console.log(`🚀 Server: http://localhost:${PORT}`));
 });
 export default app;

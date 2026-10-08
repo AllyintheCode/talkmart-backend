@@ -66,68 +66,37 @@ export const createVideo = async (req, res) => {
       return res.status(404).json({ error: "CATEGORY_NOT_FOUND", message: "Seçilmiş kateqoriya tapılmadı." });
     }
 
-    // 🤖 AI ilə yoxlanış
-    console.log(`🤖 Video yükləmədən öncə AI ilə yoxlanılır (${category.name})...`);
-    let aiCheckResult = { isAllowed: true, finalStatus: "approved", aiData: {} };
-    try {
-      aiCheckResult = await validateVideoContentAI({
-        tempFilePath,
-        categoryName: category.name,
-      });
-    } catch (aiErr) {
-      console.error("AI yoxlama xətası:", aiErr.message);
-      // AI xətası baş versə uploadı dayandırmırıq, baxış üçün review statusu veririk
-      aiCheckResult = {
-        isAllowed: true,
-        finalStatus: "review",
-        aiData: { reasoning: "AI yoxlanışı zamanı xəta oldu, manual baxış üçün qəbul edildi.", confidenceScore: 0 }
-      };
-    }
-
-    // 🚫 Əgər REJECTED olarsa → Dərhal 400 qaytar, BAZAYA VƏ R2-yə YAZMA!
-    if (!aiCheckResult.isAllowed || aiCheckResult.finalStatus === "rejected") {
-      try { if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath); } catch (_) {}
-
-      return res.status(400).json({
-        success: false,
-        error: "VIDEO_REJECTED",
-        message: "Video seçilmiş kateqoriyaya və ya qaydalara uyğun olmadığı üçün qəbul edilmədi.",
-        reason: aiCheckResult.aiData?.reasoning || "Video kateqoriya tələblərinə cavab vermir.",
-        serviceProvided: aiCheckResult.aiData?.serviceProvided || "",
-        confidenceScore: aiCheckResult.aiData?.confidenceScore || 0,
-      });
-    }
-
-    // ✅ Əgər TƏSDİQLƏNƏRSƏ (Approved / Review) → DB-də qeyd yarat və FFMPEG queue-suna ver
+    // ✅ DB-də qeyd yarat və FFMPEG + AI queue-suna ver
     const video = await Video.create({
       providerId: req.user._id,
       categoryId,
       title: title?.trim() || "",
       description: description.trim(),
       price: parsedPrice,
-      videoUrl: "",       // FFMPEG bitəndə doldurulacaq
-      publicId: "",       // FFMPEG bitəndə doldurulacaq
+      videoUrl: "",       
+      publicId: "",       
       thumbnail: "",
       duration: 0,
-      moderationStatus: aiCheckResult.finalStatus,
-      aiFeedback: aiCheckResult.aiData?.reasoning || "",
-      aiConfidence: aiCheckResult.aiData?.confidenceScore || 0,
+      moderationStatus: "pending", 
+      aiFeedback: "",
+      aiConfidence: 0,
       processingStatus: "queued",
-      status: "inactive", // FFMPEG bitəndə approved isə active olacaq
+      status: "inactive", 
     });
 
-    // FFMPEG sıxışdırma və R2 upload queue-suna ver
+    // FFMPEG sıxışdırma, R2 upload və AI Moderasiyası eyni vaxtda başlayır
     enqueueVideoProcessing({
       videoId: video._id,
       tempFilePath,
       originalExt,
+      categoryName: category.name
     });
 
     const queueStats = getQueueStats();
 
     return res.status(201).json({
       success: true,
-      message: "Video təsdiqləndi və qəbul edildi. Arxa planda emal olunur.",
+      message: "Video uğurla yükləndi və emal növbəsinə əlavə edildi.",
       video: {
         _id: video._id,
         providerId: video.providerId,
@@ -135,14 +104,9 @@ export const createVideo = async (req, res) => {
         title: video.title,
         description: video.description,
         price: video.price,
-        videoUrl: video.videoUrl || "",
-        thumbnail: video.thumbnail || "",
-        duration: video.duration || 0,
         processingStatus: video.processingStatus,
         moderationStatus: video.moderationStatus,
         status: video.status,
-        createdAt: video.createdAt,
-        updatedAt: video.updatedAt,
       },
       queue: {
         position: queueStats.queued,
