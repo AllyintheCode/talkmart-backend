@@ -2,13 +2,32 @@ import { GoogleGenerativeAI, SchemaType } from "@google/generative-ai";
 import { GoogleAIFileManager } from "@google/generative-ai/server";
 import fs from "fs";
 
+let currentKeyIndex = 0;
+
 const getClients = () => {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return { genAI: null, fileManager: null };
+  // .env faylından vergüllə ayrılmış açarları və ya tək açarı götürürük
+  const keysString = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "";
+  const keys = keysString.split(",").map(k => k.trim()).filter(Boolean);
+
+  if (keys.length === 0) return { genAI: null, fileManager: null, totalKeys: 0 };
+
+  const activeKey = keys[currentKeyIndex];
   return {
-    genAI: new GoogleGenerativeAI(key),
-    fileManager: new GoogleAIFileManager(key),
+    genAI: new GoogleGenerativeAI(activeKey),
+    fileManager: new GoogleAIFileManager(activeKey),
+    totalKeys: keys.length
   };
+};
+
+export const switchApiKey = () => {
+  const keysString = process.env.GEMINI_API_KEYS || process.env.GEMINI_API_KEY || "";
+  const keys = keysString.split(",").map(k => k.trim()).filter(Boolean);
+  if (keys.length > 1) {
+    currentKeyIndex = (currentKeyIndex + 1) % keys.length;
+    console.log(`🔄 API Açar dəyişdirildi. Yeni açar indeksi: ${currentKeyIndex + 1}/${keys.length}`);
+    return true;
+  }
+  return false;
 };
 
 const moderationSchema = {
@@ -89,7 +108,7 @@ Aşağıdakı qaydalara ciddi əməl et:
 4. Qərarını 'reasoning' hissəsində maksimum 2 cümlə ilə, konkret faktla və Azərbaycan dilində izah et.
 5. 'confidenceScore' (0-100) sənin bu qərarından nə qədər əmin olduğunu göstərsin.`;
 
-    const model = genAI.getGenerativeModel({
+    let model = genAI.getGenerativeModel({
       model: "gemini-3.8-flash",
       generationConfig: {
         responseMimeType: "application/json",
@@ -108,15 +127,31 @@ Aşağıdakı qaydalara ciddi əməl et:
         break;
       } catch (err) {
         generateAttempts++;
-        const isQuotaError = err.message?.includes("429") || err.message?.includes("quota");
+        const isQuotaError = err.message?.includes("429") || err.message?.includes("quota") || err.message?.includes("Too Many Requests");
         if (isQuotaError) {
-          console.warn(`⚠️ Gemini API quota limiti aşıldı. Review statusu veriləcək.`);
-          throw err;
+          console.warn(`⚠️ Gemini API quota limiti aşıldı.`);
+          const switched = switchApiKey();
+          if (switched) {
+            await new Promise((r) => setTimeout(r, 2000));
+            // Yeni açarla modeli yenidən yaradırıq
+            const { genAI: newGenAI } = getClients();
+            model = newGenAI.getGenerativeModel({
+              model: "gemini-3.8-flash",
+              generationConfig: {
+                responseMimeType: "application/json",
+                responseSchema: moderationSchema,
+              },
+            });
+          } else {
+            console.warn(`⚠️ Başqa ehtiyat API açarı yoxdur. Review statusu veriləcək.`);
+            throw err;
+          }
+        } else {
+           if (generateAttempts >= 3) throw err;
+           const delay = generateAttempts * 3000;
+           console.warn(`⚠️ Gemini API cəhd ${generateAttempts} uğursuz oldu (${err.message}). ${delay/1000} saniyə sonra yenidən yoxlanılır...`);
+           await new Promise((r) => setTimeout(r, delay));
         }
-        if (generateAttempts >= 3) throw err;
-        const delay = generateAttempts * 3000;
-        console.warn(`⚠️ Gemini API cəhd ${generateAttempts} uğursuz oldu (${err.message}). ${delay/1000} saniyə sonra yenidən yoxlanılır...`);
-        await new Promise((r) => setTimeout(r, delay));
       }
     }
 
