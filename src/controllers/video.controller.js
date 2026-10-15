@@ -43,21 +43,22 @@ export const createVideo = async (req, res) => {
     // Video faylının uzantısını təyin et
     const originalExt = path.extname(req.file.originalname).toLowerCase() || ".mp4";
 
+    // Raw video buffer-i diskə tək dəfə yaz (Disk I/O optimallaşdırması)
+    const tmpId = crypto.randomUUID();
+    const tempFilePath = path.join(os.tmpdir(), `upload_${tmpId}${originalExt}`);
+    fs.writeFileSync(tempFilePath, req.file.buffer);
+
     // Videonun uzunluğunu yoxla (Maks 5 dəqiqə = 300 saniyə)
-    // Bu yoxlama seriətdə (request içində) baş verir, təz dir.
+    let duration = 0;
     try {
-      const duration = await getVideoDuration(req.file.buffer, originalExt);
+      duration = await getVideoDuration(tempFilePath, originalExt);
       if (duration > 300) {
+        try { fs.unlinkSync(tempFilePath); } catch (_) {}
         return res.status(400).json({ error: "VIDEO_TOO_LONG", message: "Videonun uzunluğu 5 dəqiqədən artıq ola bilməz." });
       }
     } catch (durErr) {
       console.warn("Video uzunluğu yoxlanıla bilmədi:", durErr.message);
     }
-
-    // Raw video buffer-i temp fayla yaz (AI və queue üçün)
-    const tmpId = crypto.randomUUID();
-    const tempFilePath = path.join(os.tmpdir(), `upload_${tmpId}${originalExt}`);
-    fs.writeFileSync(tempFilePath, req.file.buffer);
 
     // Kateqoriyanı tap
     const category = await Category.findById(categoryId);
@@ -76,7 +77,7 @@ export const createVideo = async (req, res) => {
       videoUrl: "",       
       publicId: "",       
       thumbnail: "",
-      duration: 0,
+      duration: Math.round(duration || 0),
       moderationStatus: "pending", 
       aiFeedback: "",
       aiConfidence: 0,
@@ -89,7 +90,8 @@ export const createVideo = async (req, res) => {
       videoId: video._id,
       tempFilePath,
       originalExt,
-      categoryName: category.name
+      categoryName: category.name,
+      duration: Math.round(duration || 0),
     });
 
     const queueStats = getQueueStats();

@@ -7,51 +7,52 @@ import { validateVideoContentAI } from "./aiModeration.service.js";
 
 // ============================================================
 // FFMPEG sıxışdırma + R2 yüklə + AI Analiz queue
-// Eyni anda maksimum 2 video işlənsin (CPU-nu qorumaq üçün)
+// Concurrency 3 — Sürətləndirilmiş preset sayəsində daha çox paralel emal
 // ============================================================
-const processingQueue = new PQueue({ concurrency: 2 });
+const processingQueue = new PQueue({ concurrency: 3 });
 
 /**
- * Paralel Video Emalı Pipeline
- * 1. AI analizi və FFMPEG sıxışdırması eyni anda başlayır
- * 2. İkisi də bitəndə DB yenilənir
+ * Paralel və Sürətləndirilmiş Video Emalı Pipeline
+ * 1. AI analizi cəmi 2-4 saniyədə bitir (Keyframe + Flash-Lite)
+ * 2. Rədd edilərsə, dərhal yekunlaşır (vaxt və resurs itkisi olmur)
+ * 3. Təsdiq edilərsə, FFMPEG fast preset və paralel R2 yükləmə icra olunur
  */
-const processVideoJob = async ({ videoId, tempFilePath, originalExt, categoryName }) => {
-  console.log(`⚙️ Video emalı və AI analizi eyni anda başladı: ${videoId}`);
+const processVideoJob = async ({ videoId, tempFilePath, originalExt, categoryName, duration }) => {
+  console.log(`⚙️ Video emalı başladı: ${videoId}`);
 
   try {
     // 1. Statusu processing edirik
     await Video.findByIdAndUpdate(videoId, { processingStatus: "processing" });
 
-    // Tapşırıq 1: Əvvəlcə Gemini AI Moderasiyası (temp fayl üzərindən)
+    // Tapşırıq 1: Yüksək sürətli Gemini AI Moderasiyası
     console.log(`🤖 AI analizi başladı: ${videoId}`);
-    const aiCheckResult = await validateVideoContentAI({ tempFilePath, categoryName });
+    const aiCheckResult = await validateVideoContentAI({ tempFilePath, categoryName, duration });
 
     let videoUrl = "";
     let publicId = "";
     let thumbnail = "";
 
-    // Əgər video RƏDD EDİLMƏYİBSƏ, FFMPEG sıxışdırma və R2 yükləməni icra et
+    // Əgər video RƏDD EDİLMƏYİBSƏ, FFMPEG sıxışdırma və paralel R2 yükləməni icra et
     if (aiCheckResult.finalStatus !== "rejected") {
-      console.log(`✅ AI icazə verdi (${aiCheckResult.finalStatus}). FFMPEG və R2 yükləməsi başlayır...`);
-      const rawBuffer = fs.readFileSync(tempFilePath);
-      const originalSize = rawBuffer.length;
+      console.log(`✅ AI icazə verdi (${aiCheckResult.finalStatus}). FFMPEG və paralel R2 yükləməsi başlayır...`);
 
-      const compressed = await compressVideo(rawBuffer, originalExt);
-      const compressedSize = compressed.buffer.length;
-      console.log(`📦 Sıxışdırıldı: ${(originalSize/1024/1024).toFixed(2)}MB -> ${(compressedSize/1024/1024).toFixed(2)}MB [${videoId}]`);
+      // 1. Faylı diskdən birbaşa sürətli preset ilə sıxışdırırıq
+      const compressed = await compressVideo(tempFilePath, originalExt);
 
-      const r2Video = await uploadToR2(compressed.buffer, "talkmart/videos", compressed.mimetype, compressed.ext);
+      // 2. Video upload və Thumbnail yaratma + upload paralel aparılır
+      const [r2Video, r2Thumb] = await Promise.all([
+        uploadToR2(compressed.buffer, "talkmart/videos", compressed.mimetype, compressed.ext),
+        generateThumbnail(tempFilePath, originalExt)
+          .then((thumbData) => uploadToR2(thumbData.buffer, "talkmart/thumbnails", thumbData.mimetype, thumbData.ext))
+          .catch((e) => {
+            console.warn(`⚠️ Thumbnail xətası: ${e.message}`);
+            return { url: "" };
+          }),
+      ]);
+
       videoUrl = r2Video.url;
       publicId = r2Video.key;
-
-      try {
-        const thumbData = await generateThumbnail(rawBuffer, originalExt);
-        const r2Thumb = await uploadToR2(thumbData.buffer, "talkmart/thumbnails", thumbData.mimetype, thumbData.ext);
-        thumbnail = r2Thumb.url;
-      } catch (e) {
-        console.warn(`⚠️ Thumbnail xətası: ${e.message}`);
-      }
+      thumbnail = r2Thumb.url;
     } else {
       console.log(`🚫 Video AI tərəfindən rədd edildi! R2 və Thumbnail mərhələləri ləğv olundu. [${videoId}]`);
     }
@@ -93,9 +94,9 @@ const processVideoJob = async ({ videoId, tempFilePath, originalExt, categoryNam
   }
 };
 
-export const enqueueVideoProcessing = ({ videoId, tempFilePath, originalExt, categoryName }) => {
+export const enqueueVideoProcessing = ({ videoId, tempFilePath, originalExt, categoryName, duration }) => {
   processingQueue
-    .add(() => processVideoJob({ videoId, tempFilePath, originalExt, categoryName }))
+    .add(() => processVideoJob({ videoId, tempFilePath, originalExt, categoryName, duration }))
     .catch((err) => console.error("Processing queue xətası:", err));
 
   console.log(`📋 Video növbəyə alındı: ${videoId} | Növbədə: ${processingQueue.size}`);
@@ -127,5 +128,5 @@ export const recoverStuckVideos = async () => {
 export const getQueueStats = () => ({
   queued: processingQueue.size,
   running: processingQueue.pending,
-  concurrency: 2,
+  concurrency: 3,
 });

@@ -52,28 +52,34 @@ export const compressImage = async (buffer) => {
  * @param {string} originalExt - Orijinal fayl uzantısı (.mp4, .mov, vs.)
  * @returns {{ buffer: Buffer, ext: string, mimetype: string }}
  */
-export const compressVideo = async (buffer, originalExt = ".mp4") => {
-  // Temp fayllar yarad
+export const compressVideo = async (input, originalExt = ".mp4") => {
   const tmpId = crypto.randomUUID();
   const tmpDir = os.tmpdir();
-  const inputPath = path.join(tmpDir, `input_${tmpId}${originalExt}`);
-  const outputPath = path.join(tmpDir, `output_${tmpId}.mp4`);
+  let inputPath = "";
+  let isTempInput = false;
 
-  // Buffer-i diskə yaz
-  fs.writeFileSync(inputPath, buffer);
+  if (typeof input === "string" && fs.existsSync(input)) {
+    inputPath = input;
+  } else {
+    inputPath = path.join(tmpDir, `input_${tmpId}${originalExt}`);
+    fs.writeFileSync(inputPath, input);
+    isTempInput = true;
+  }
+
+  const outputPath = path.join(tmpDir, `output_${tmpId}.mp4`);
 
   try {
     await new Promise((resolve, reject) => {
       ffmpeg(inputPath)
-        .videoCodec("libx264")       // H.264 — ən geniş dəstəklənən codec
+        .videoCodec("libx264")       // H.264
         .outputOptions([
-          "-crf 23",                  // Keyfiyyət: 18=lossless, 23=default, 28=aşağı. 23 idealdır
-          "-preset medium",           // Sürət/keyfiyyət balansı
-          "-movflags +faststart",     // Web üçün optimallaşdırma (progressive loading)
+          "-crf 23",                  // Keyfiyyət: 23 idealdır
+          "-preset fast",             // Sürətli emal üçün optimallaşdırıldı (2-3x daha sürətli)
+          "-movflags +faststart",     // Web üçün progressive loading
           "-pix_fmt yuv420p",         // Bütün player-lərlə uyğunluq
         ])
         .audioCodec("aac")           // AAC audio
-        .audioBitrate("128k")        // 128kbps — keyfiyyətli audio
+        .audioBitrate("128k")        // 128kbps keyfiyyətli audio
         .format("mp4")
         .on("end", resolve)
         .on("error", reject)
@@ -88,35 +94,45 @@ export const compressVideo = async (buffer, originalExt = ".mp4") => {
       mimetype: "video/mp4",
     };
   } finally {
-    // Temp faylları təmizlə
-    try { fs.unlinkSync(inputPath); } catch (_) {}
+    if (isTempInput) {
+      try { fs.unlinkSync(inputPath); } catch (_) {}
+    }
     try { fs.unlinkSync(outputPath); } catch (_) {}
   }
 };
 
 /**
  * Videodan thumbnail yaradır
- * - Videonun 1-ci saniyəsindəki frame-i götürür
+ * - Videonun 0.5-ci saniyəsindəki frame-i sürətli seek ilə götürür
  * - Şəkil kimi sıxışdırıb qaytarır
  *
- * @param {Buffer} buffer - Video buffer-i
+ * @param {Buffer|string} input - Video buffer-i və ya fayl yolu
  * @param {string} originalExt - Fayl uzantısı
  * @returns {Promise<{ buffer: Buffer, ext: string, mimetype: string }>}
  */
-export const generateThumbnail = async (buffer, originalExt = ".mp4") => {
+export const generateThumbnail = async (input, originalExt = ".mp4") => {
   const tmpId = crypto.randomUUID();
   const tmpDir = os.tmpdir();
-  const inputPath = path.join(tmpDir, `thumb_in_${tmpId}${originalExt}`);
+  let inputPath = "";
+  let isTempInput = false;
+
+  if (typeof input === "string" && fs.existsSync(input)) {
+    inputPath = input;
+  } else {
+    inputPath = path.join(tmpDir, `thumb_in_${tmpId}${originalExt}`);
+    fs.writeFileSync(inputPath, input);
+    isTempInput = true;
+  }
+
   const outputFilename = `thumb_out_${tmpId}.png`;
   const outputPath = path.join(tmpDir, outputFilename);
 
-  fs.writeFileSync(inputPath, buffer);
-
   try {
     await new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .seekInput('00:00:00.500') // Videonun 0.5-ci saniyəsi
-        .frames(1)
+      ffmpeg()
+        .input(inputPath)
+        .inputOptions(["-ss 00:00:00.500"]) // Fast input seek
+        .outputOptions(["-vframes 1"])
         .output(outputPath)
         .on("end", resolve)
         .on("error", reject)
@@ -128,31 +144,44 @@ export const generateThumbnail = async (buffer, originalExt = ".mp4") => {
     // Şəkli sıxışdır
     return await compressImage(thumbnailBuffer);
   } finally {
-    try { fs.unlinkSync(inputPath); } catch (_) {}
+    if (isTempInput) {
+      try { fs.unlinkSync(inputPath); } catch (_) {}
+    }
     try { fs.unlinkSync(outputPath); } catch (_) {}
   }
 };
 
 /**
  * Videonun uzunluğunu saniyə ilə qaytarır
+ * @param {Buffer|string} input - Video buffer-i və ya fayl yolu
+ * @param {string} originalExt - Fayl uzantısı
  */
-export const getVideoDuration = async (buffer, originalExt = ".mp4") => {
-  const tmpId = crypto.randomUUID();
-  const tmpDir = os.tmpdir();
-  const inputPath = path.join(tmpDir, `dur_in_${tmpId}${originalExt}`);
+export const getVideoDuration = async (input, originalExt = ".mp4") => {
+  let inputPath = "";
+  let isTempInput = false;
 
-  fs.writeFileSync(inputPath, buffer);
+  if (typeof input === "string" && fs.existsSync(input)) {
+    inputPath = input;
+  } else {
+    const tmpId = crypto.randomUUID();
+    const tmpDir = os.tmpdir();
+    inputPath = path.join(tmpDir, `dur_in_${tmpId}${originalExt}`);
+    fs.writeFileSync(inputPath, input);
+    isTempInput = true;
+  }
 
   try {
     const duration = await new Promise((resolve, reject) => {
       ffmpeg.ffprobe(inputPath, (err, metadata) => {
         if (err) return reject(err);
-        resolve(metadata.format.duration);
+        resolve(metadata?.format?.duration || 0);
       });
     });
     return duration; // Saniyə ilə
   } finally {
-    try { fs.unlinkSync(inputPath); } catch (_) {}
+    if (isTempInput) {
+      try { fs.unlinkSync(inputPath); } catch (_) {}
+    }
   }
 };
 

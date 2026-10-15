@@ -12,7 +12,13 @@ async function runTests() {
 
   // Test 1: SƏHV / UYĞUNSUZ VİDEO TESTİ
   // Kater gəzintisi videosu amma "Bişdüş" (yemək) kateqoriyası ilə
-  const wrongCategory = await Category.findOne({ name: "Bişdüş" });
+  let wrongCategory = await Category.findOne({ name: "Bişdüş" });
+  if (!wrongCategory) {
+    wrongCategory = await Category.create({
+      name: "Bişdüş",
+      status: "active",
+    });
+  }
   
   const wrongVideo = await Video.create({
     providerId: new mongoose.Types.ObjectId("6a4d0551561d637980a330c2"),
