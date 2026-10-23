@@ -5,6 +5,7 @@ import {
   deleteVideo,
   getFeedVideos,
   getExploreVideos,
+  getPublicVideoById,
 } from "../controllers/video.controller.js";
 import {
   toggleLike,
@@ -26,6 +27,9 @@ const router = Router();
 // ============================
 router.get("/feed", optionalAuth, getFeedVideos);
 router.get("/explore", optionalAuth, getExploreVideos);
+
+// GET /api/videos/:id/public  →  deep link fallback üçün ictimai video məlumatı (auth tələb olunmur)
+router.get("/:id/public", getPublicVideoById);
 
 // ============================
 // Liked / Saved videolar — LOGIN TƏLƏB OLUNUR

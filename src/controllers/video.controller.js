@@ -501,3 +501,27 @@ export const getExploreVideos = async (req, res) => {
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
   }
 };
+
+// GET /api/videos/:id/public — Deep link fallback səhifəsi üçün ictimai video məlumatı
+export const getPublicVideoById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Video tapılmadı." });
+    }
+
+    const video = await Video.findOne({ _id: id, status: "active" })
+      .select("title description thumbnail videoUrl duration viewCount likeCount createdAt")
+      .lean();
+
+    if (!video) {
+      return res.status(404).json({ error: "NOT_FOUND", message: "Video tapılmadı və ya aktiv deyil." });
+    }
+
+    return res.status(200).json({ success: true, video });
+  } catch (err) {
+    console.error("getPublicVideoById error:", err);
+    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
+  }
+};
