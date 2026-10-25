@@ -4,6 +4,7 @@ import Video from "../models/Video.js";
 import { compressVideo, generateThumbnail } from "./compress.service.js";
 import { uploadToR2 } from "./r2Upload.service.js";
 import { validateVideoContentAI } from "./aiModeration.service.js";
+import { delCachePattern } from "../config/redis.js";
 
 // ============================================================
 // FFMPEG sıxışdırma + R2 yüklə + AI Analiz queue
@@ -76,6 +77,10 @@ const processVideoJob = async ({ videoId, tempFilePath, originalExt, categoryNam
       }
 
       await video.save();
+      if (video.status === "active") {
+        await delCachePattern("feed:*");
+        await delCachePattern("categories:top:*");
+      }
       console.log(`✅ Video tam emal edildi və təsdiqləndi: ${videoId} | Status: ${aiCheckResult.finalStatus}`);
     }
 

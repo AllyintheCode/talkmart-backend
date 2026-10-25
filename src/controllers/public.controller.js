@@ -1,11 +1,18 @@
 import Onboarding from "../models/Onboarding.js";
 import Category from "../models/Category.js";
 import Video from "../models/Video.js";
+import { getCache, setCache } from "../config/redis.js";
 
 // GET /api/onboarding
 export const getOnboardings = async (req, res) => {
   try {
+    const cached = await getCache("onboarding:screens");
+    if (cached) {
+      return res.status(200).json({ success: true, screens: cached });
+    }
+
     const screens = await Onboarding.find().sort({ order: 1 });
+    await setCache("onboarding:screens", screens, 3600); // 1 saat keş
     return res.status(200).json({ success: true, screens });
   } catch (err) {
     console.error("getOnboardings error:", err);
@@ -16,7 +23,13 @@ export const getOnboardings = async (req, res) => {
 // GET /api/categories
 export const getActiveCategories = async (req, res) => {
   try {
+    const cached = await getCache("categories:active");
+    if (cached) {
+      return res.status(200).json({ success: true, categories: cached });
+    }
+
     const categories = await Category.find({ status: "active" }).sort({ name: 1 });
+    await setCache("categories:active", categories, 3600); // 1 saat keş
     return res.status(200).json({ success: true, categories });
   } catch (err) {
     console.error("getActiveCategories error:", err);
@@ -29,6 +42,16 @@ export const getActiveCategories = async (req, res) => {
 export const getTopCategories = async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+    const cacheKey = `categories:top:${limit}`;
+
+    const cached = await getCache(cacheKey);
+    if (cached) {
+      return res.status(200).json({
+        success: true,
+        count: cached.length,
+        categories: cached,
+      });
+    }
 
     const topCategories = await Video.aggregate([
       // Yalnız aktiv videoları götür
@@ -72,6 +95,8 @@ export const getTopCategories = async (req, res) => {
         },
       },
     ]);
+
+    await setCache(cacheKey, topCategories, 600); // 10 dəqiqə keş
 
     return res.status(200).json({
       success: true,

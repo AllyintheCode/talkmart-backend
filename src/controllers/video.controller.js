@@ -1,3 +1,4 @@
+import { getCache, setCache, delCachePattern } from "../config/redis.js";
 import mongoose from "mongoose";
 import Video from "../models/Video.js";
 import path from "path";
@@ -173,6 +174,8 @@ export const deleteVideo = async (req, res) => {
     }
 
     await video.deleteOne();
+    await delCachePattern("feed:*");
+    await delCachePattern("categories:top:*");
 
     return res.status(200).json({
       success: true,
@@ -195,6 +198,15 @@ export const getFeedVideos = async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
     const userId = req.user?._id || null;
+
+    // Guest istifadəçilər üçün 30 saniyəlik Redis keşi
+    const cacheKey = !userId ? `feed:guest:${limit}` : null;
+    if (cacheKey) {
+      const cached = await getCache(cacheKey);
+      if (cached && cached.length > 0) {
+        return res.status(200).json({ success: true, count: cached.length, videos: cached });
+      }
+    }
     let blockedIds = [];
 
     if (userId) {
@@ -308,6 +320,10 @@ export const getFeedVideos = async (req, res) => {
     });
 
     const videos = await Video.aggregate(pipeline);
+
+    if (cacheKey && videos.length > 0) {
+      await setCache(cacheKey, videos, 30); // 30 saniyə keşlə
+    }
 
     return res.status(200).json({ success: true, count: videos.length, videos });
   } catch (err) {
