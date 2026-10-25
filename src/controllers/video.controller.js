@@ -43,10 +43,13 @@ export const createVideo = async (req, res) => {
     // Video faylının uzantısını təyin et
     const originalExt = path.extname(req.file.originalname).toLowerCase() || ".mp4";
 
-    // Raw video buffer-i diskə tək dəfə yaz (Disk I/O optimallaşdırması)
-    const tmpId = crypto.randomUUID();
-    const tempFilePath = path.join(os.tmpdir(), `upload_${tmpId}${originalExt}`);
-    fs.writeFileSync(tempFilePath, req.file.buffer);
+    // Multer diskStorage artıq faylı diskə yazıb (RAM-ı doldurmur)
+    let tempFilePath = req.file.path || null;
+    if (!tempFilePath && req.file.buffer) {
+      const tmpId = crypto.randomUUID();
+      tempFilePath = path.join(os.tmpdir(), `upload_${tmpId}${originalExt}`);
+      fs.writeFileSync(tempFilePath, req.file.buffer);
+    }
 
     // Videonun uzunluğunu yoxla (Maks 5 dəqiqə = 300 saniyə)
     let duration = 0;

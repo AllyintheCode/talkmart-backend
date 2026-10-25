@@ -1,10 +1,27 @@
 import multer from "multer";
 import path from "path";
+import os from "os";
+import crypto from "crypto";
 
 // ============================
-// MEMORY STORAGE — Fayl RAM-da saxlanılır, controller-dən R2-yə yüklənir
+// DISK STORAGE (VIDEO) — Video birbaşa SSD diskə axın (stream) şəklində yazılır,
+// RAM-ı doldurmur və serverin çökməsinin qarşısını alır.
 // ============================
-const storage = multer.memoryStorage();
+const videoDiskStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, os.tmpdir());
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || ".mp4";
+    const tmpId = crypto.randomUUID();
+    cb(null, `upload_${tmpId}${ext}`);
+  },
+});
+
+// ============================
+// MEMORY STORAGE (IMAGE) — Şəkillər kiçik olduğu üçün Sharp emalı üçün RAM-da qalır
+// ============================
+const memoryStorage = multer.memoryStorage();
 
 // ============================
 // VIDEO UPLOAD
@@ -19,7 +36,7 @@ const videoFilter = (req, file, cb) => {
 };
 
 export const uploadVideo = multer({
-  storage,
+  storage: videoDiskStorage,
   fileFilter: videoFilter,
   limits: { fileSize: 250 * 1024 * 1024 }, // 250 MB
 });
@@ -37,7 +54,7 @@ const imageFilter = (req, file, cb) => {
 };
 
 export const uploadImage = multer({
-  storage,
+  storage: memoryStorage,
   fileFilter: imageFilter,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB per image limit
 });
