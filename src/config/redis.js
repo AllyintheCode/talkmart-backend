@@ -1,3 +1,4 @@
+import { logger } from "../utils/logger.js";
 import Redis from "ioredis";
 
 const REDIS_HOST = process.env.REDIS_HOST || "127.0.0.1";
@@ -22,8 +23,8 @@ try {
   });
 
   redis.on("connect", () => {
-    isRedisConnected = true;
-    console.log("⚡ Redis: Qoşuldu");
+    isRedisConnected = false;
+    logger.log("⚡ Redis: Qoşuldu");
   });
 
   redis.on("ready", () => {
@@ -33,7 +34,7 @@ try {
   redis.on("error", (err) => {
     isRedisConnected = false;
     // Sadəcə xəbərdarlıq yaz, serveri dayandırma
-    // console.warn("⚠️ Redis əlaqə xətası (Server MongoDB ilə işləməyə davam edir):", err.message);
+    // logger.warn("⚠️ Redis əlaqə xətası (Server MongoDB ilə işləməyə davam edir):", err.message);
   });
 
   redis.on("close", () => {
@@ -41,11 +42,11 @@ try {
   });
 
   // Arxa planda qoşulmağa cəhd et
-  redis.connect().catch(() => {
-    // console.warn("⚠️ Redis lokal olaraq aktiv deyil. Keşsiz rejimdə işləyir.");
+  if (process.env.NODE_ENV !== "test" && process.env.REDIS_DISABLED !== "true") redis.connect().catch(() => {
+    // logger.warn("⚠️ Redis lokal olaraq aktiv deyil. Keşsiz rejimdə işləyir.");
   });
 } catch (err) {
-  console.warn("⚠️ Redis client yaradıla bilmədi:", err.message);
+  logger.warn("⚠️ Redis client yaradıla bilmədi:", err.message);
 }
 
 /**
@@ -97,18 +98,24 @@ export async function delCache(key) {
 
 /**
  * Müəyyən prefikslə olan bütün açarları silmək (Məs: "feed:*")
+ * O(N) keys() yerinə təhlükəsiz və bloklamayan SCAN istifadə olunur (TM-024)
  */
 export async function delCachePattern(pattern) {
   if (!isRedisConnected || !redis) return false;
   try {
-    const keys = await redis.keys(pattern);
-    if (keys.length > 0) {
-      await redis.del(...keys);
-    }
+    let cursor = "0";
+    do {
+      const [nextCursor, keys] = await redis.scan(cursor, "MATCH", pattern, "COUNT", 100);
+      cursor = nextCursor;
+      if (keys && keys.length > 0) {
+        await redis.del(...keys);
+      }
+    } while (cursor !== "0");
     return true;
   } catch (err) {
     return false;
   }
 }
 
+export function getRedisClient() { return isRedisConnected ? redis : null; }
 export default redis;

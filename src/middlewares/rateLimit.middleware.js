@@ -1,36 +1,46 @@
 import rateLimit, { ipKeyGenerator } from "express-rate-limit";
+import crypto from "node:crypto";
+import { getRedisClient } from "../config/redis.js";
+import RateBucket from "../models/RateBucket.js";
 
-// Engagement əməliyyatları üçün rate limiter
-export const engagementLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000,
-  max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: "Çox tez-tez əməliyyat edirsiniz. 1 dəqiqə gözləyin.",
-  },
-  keyGenerator: (req) => {
-    return req.user?._id?.toString() || ipKeyGenerator(req.ip || "unknown");
+export class SharedRateStore {
+  constructor(prefix) { this.prefix = prefix; this.localKeys = false; }
+  init(options) { this.windowMs = options.windowMs; }
+  key(key) { return `${this.prefix}:${crypto.createHash("sha256").update(key).digest("hex")}`; }
+  async increment(key) {
+    const redis = getRedisClient();
+    if (redis) {
+      const [totalHits, ttl] = await redis.eval(`local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('PEXPIRE',KEYS[1],ARGV[1]) end; return {n,redis.call('PTTL',KEYS[1])}`, 1, this.key(key), this.windowMs);
+      return { totalHits, resetTime: new Date(Date.now() + Math.max(0, ttl)) };
+    }
+    // Shared DB fallback retains abuse protection during a Redis outage.
+    const reset = (Math.floor(Date.now() / this.windowMs) + 1) * this.windowMs;
+    const id = `${this.key(key)}:${reset}`;
+    let bucket;
+    try {
+      bucket = await RateBucket.findOneAndUpdate({ _id: id }, { $inc: { count: 1 }, $setOnInsert: { expiresAt: new Date(reset) } }, { upsert: true, returnDocument: "after" });
+    } catch (err) {
+      if (err.code !== 11000) throw err;
+      bucket = await RateBucket.findOneAndUpdate({ _id: id }, { $inc: { count: 1 } }, { returnDocument: "after" });
+    }
+    return { totalHits: bucket.count, resetTime: new Date(reset) };
+  }
+  async decrement() {}
+  async resetKey(key) { await getRedisClient()?.del(this.key(key)); }
+}
+const ip = (req) => ipKeyGenerator(req.ip || "127.0.0.1");
+const account = (req) => req.user?._id?.toString() || (typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : ip(req));
+const limiter = (name, limit, windowMs, keyGenerator) => rateLimit({
+  windowMs, limit, keyGenerator, store: new SharedRateStore(`ratelimit:${name}`),
+  standardHeaders: "draft-8", legacyHeaders: false,
+  handler(req, res) {
+    const seconds = Math.max(1, Math.ceil(((req.rateLimit?.resetTime?.getTime() || Date.now() + windowMs) - Date.now()) / 1000));
+    res.setHeader("Retry-After", String(seconds));
+    res.status(429).json({ success: false, error: "RATE_LIMIT_EXCEEDED", message: "Too many requests" });
   },
 });
-
-// Auth & OTP üçün limiter
-export const authLimiter = rateLimit({
-  windowMs: 10 * 60 * 1000,
-  max: 5,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    error: "RATE_LIMIT_EXCEEDED",
-    message:
-      "Həddindən artıq cəhd etdiniz. Lütfən 10 dəqiqə sonra yenidən cəhd edin.",
-  },
-  keyGenerator: (req) => {
-    return (
-      req.body?.email?.toLowerCase().trim() ||
-      ipKeyGenerator(req.ip || "unknown")
-    );
-  },
-});
+export const globalLimiter = limiter("public", 300, 60000, ip);
+export const authIpLimiter = limiter("auth-ip", 30, 600000, ip);
+export const authLimiter = limiter("auth-account", 10, 600000, account);
+export const engagementLimiter = limiter("engagement", 30, 60000, account);
+export const uploadLimiter = limiter("upload", 15, 600000, account);

@@ -4,7 +4,7 @@ const ProviderProfileSchema = new mongoose.Schema(
   {
     companyName:      { type: String, trim: true },
     categoryId:       { type: String, trim: true },   // Seçilmiş kateqoriya ID-si
-    address:          { type: String, trim: true },   // İstifadəçinin ənvanı
+    address:          { type: String, trim: true },   // İstifadəçinin ünvanı
     location:         { type: String, trim: true },
     website:          { type: String, trim: true },
     instagram:        { type: String, trim: true },
@@ -47,10 +47,22 @@ const UserSchema = new mongoose.Schema(
     // Admin tərəfindən bloklanıbmı?
     isBlocked: { type: Boolean, default: false },
 
+    // Sessiya versiyası — şifrə dəyişdikdə və ya bloklandıqda artırılır və köhnə tokenlər etibarsız olur (TM-005)
+    sessionVersion: { type: Number, default: 1 },
+    accountStatus: { type: String, enum: ["active", "deleting"], default: "active" },
+    resetTokenHash: { type: String, default: null, select: false },
+    resetTokenExpiresAt: { type: Date, default: null, select: false },
+    uploadReservation: { type: String, default: null, select: false },
+    uploadReservedUntil: { type: Date, default: null, select: false },
+
     // İstifadəçinin özünün blokladığı digər istifadəçilər
     blockedUsers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   },
   { timestamps: true },
 );
+
+UserSchema.index({ blockedUsers: 1 });
+UserSchema.index({ role: 1, createdAt: -1, _id: -1 });
+UserSchema.index({ accountStatus: 1 });
 
 export default mongoose.models.User || mongoose.model("User", UserSchema);

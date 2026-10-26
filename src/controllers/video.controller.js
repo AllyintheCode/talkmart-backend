@@ -1,105 +1,116 @@
-import { getCache, setCache, delCachePattern } from "../config/redis.js";
+import { logger } from "../utils/logger.js";
 import mongoose from "mongoose";
 import Video from "../models/Video.js";
 import path from "path";
+import crypto from "node:crypto";
 import fs from "fs";
-import os from "os";
-import crypto from "crypto";
-import {
-  VideoLike,
-  VideoSave,
-} from "../models/VideoInteraction.js";
 import Category from "../models/Category.js";
-import { deleteFromR2 } from "../services/r2Upload.service.js";
-import { getVideoDuration } from "../services/compress.service.js";
-import { enqueueVideoProcessing, getQueueStats } from "../services/videoProcessing.service.js";
-import { validateVideoContentAI } from "../services/aiModeration.service.js";
+import { uploadFileToR2 } from "../services/r2Upload.service.js";
+import { getQueueStats } from "../services/videoProcessing.service.js";
+import { validateUploadedVideo } from "../services/mediaProbe.service.js";
+import { deleteVideoCompletely } from "../services/videoCleanup.service.js";
+import { parsePagination, isValidObjectId, cursorFilter, nextCursor } from "../utils/pagination.js";
+import { observe } from "../utils/metrics.js";
+import { publicVideoFilter, publicOwnerFilter } from "../services/videoState.service.js";
+import { fail } from "../utils/http.js";
+
+const unlinkQuiet = (filePath) => {
+  try {
+    if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  } catch (_) {}
+};
+
+const providerPublicFields = () => ({
+  _id: "$provider._id",
+  fullName: "$provider.fullName",
+  companyName: "$provider.providerProfile.companyName",
+  profileImage: "$provider.profileImage",
+
+});
 
 // POST /api/videos/upload
 export const createVideo = async (req, res) => {
+  const tempFilePath = req.file?.path || null;
+  let pendingVideo;
+  const started = Date.now();
+
   try {
     if (!req.file) {
-      return res.status(400).json({ error: "MISSING_FILE", message: "Video fayl tələb olunur." });
+      return fail(res, 400, "MISSING_FILE", "Video fayl tələb olunur.");
     }
 
     const { description, price, title, categoryId } = req.body;
 
     if (!categoryId) {
-      return res.status(400).json({ error: "MISSING_CATEGORY", message: "Kateqoriya seçimi tələb olunur." });
+      return fail(res, 400, "MISSING_CATEGORY", "Kateqoriya seçimi tələb olunur.");
     }
-
-    if (!description || description.trim() === "") {
-      return res.status(400).json({ error: "MISSING_DESCRIPTION", message: "Açıqlama tələb olunur." });
+    if (!isValidObjectId(categoryId)) {
+      return fail(res, 400, "INVALID_CATEGORY", "Kateqoriya ID formatı yanlışdır.");
     }
-
+    if (typeof description !== "string" || description.trim() === "" || description.length > 5000) {
+      return fail(res, 400, "MISSING_DESCRIPTION", "Açıqlama tələb olunur.");
+    }
     if (price === undefined || price === null || price === "") {
-      return res.status(400).json({ error: "MISSING_PRICE", message: "Qiymət tələb olunur." });
+      return fail(res, 400, "MISSING_PRICE", "Qiymət tələb olunur.");
     }
 
-    const parsedPrice = parseFloat(price);
-    if (isNaN(parsedPrice) || parsedPrice < 0) {
-      return res.status(400).json({ error: "INVALID_PRICE", message: "Qiymət düzgün deyil." });
+    const parsedPrice = Number(price);
+    if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+      return fail(res, 400, "INVALID_PRICE", "Qiymət düzgün deyil.");
     }
 
-    // Video faylının uzantısını təyin et
     const originalExt = path.extname(req.file.originalname).toLowerCase() || ".mp4";
-
-    // Multer diskStorage artıq faylı diskə yazıb (RAM-ı doldurmur)
-    let tempFilePath = req.file.path || null;
-    if (!tempFilePath && req.file.buffer) {
-      const tmpId = crypto.randomUUID();
-      tempFilePath = path.join(os.tmpdir(), `upload_${tmpId}${originalExt}`);
-      fs.writeFileSync(tempFilePath, req.file.buffer);
-    }
-
-    // Videonun uzunluğunu yoxla (Maks 5 dəqiqə = 300 saniyə)
-    let duration = 0;
+    let probe;
     try {
-      duration = await getVideoDuration(tempFilePath, originalExt);
-      if (duration > 300) {
-        try { fs.unlinkSync(tempFilePath); } catch (_) {}
-        return res.status(400).json({ error: "VIDEO_TOO_LONG", message: "Videonun uzunluğu 5 dəqiqədən artıq ola bilməz." });
-      }
-    } catch (durErr) {
-      console.warn("Video uzunluğu yoxlanıla bilmədi:", durErr.message);
+      probe = await validateUploadedVideo(tempFilePath);
+    } catch (probeErr) {
+      const map = {
+        VIDEO_TOO_LONG: [400, "Videonun uzunluğu 5 dəqiqədən artıq ola bilməz."],
+        VIDEO_RESOLUTION_TOO_HIGH: [400, "Video qətnaməsi çox yüksəkdir."],
+        CORRUPT_VIDEO: [400, "Video faylı zədəlidir və ya oxuna bilmir."],
+        UNSUPPORTED_FORMAT: [415, "Dəstəklənməyən media formatı."],
+      };
+      const mapped = map[probeErr.code] || [400, "Video yoxlanışı uğursuz oldu."];
+      return fail(res, mapped[0], probeErr.code || "INVALID_VIDEO", mapped[1]);
     }
 
-    // Kateqoriyanı tap
     const category = await Category.findById(categoryId);
-    if (!category) {
-      try { if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath); } catch (_) {}
-      return res.status(404).json({ error: "CATEGORY_NOT_FOUND", message: "Seçilmiş kateqoriya tapılmadı." });
+    if (!category || category.status !== "active") {
+      return fail(res, 404, "CATEGORY_NOT_FOUND", "Seçilmiş kateqoriya tapılmadı.");
     }
 
-    // ✅ DB-də qeyd yarat və FFMPEG + AI queue-suna ver
-    const video = await Video.create({
+    if (typeof title !== "undefined" && (typeof title !== "string" || title.length > 200)) return fail(res, 400, "INVALID_TITLE", "Invalid title");
+    const stagingKey = `talkmart/staging/${req.user._id}/${crypto.randomUUID()}${originalExt}`;
+    const video = pendingVideo = await Video.create({
       providerId: req.user._id,
       categoryId,
       title: title?.trim() || "",
       description: description.trim(),
       price: parsedPrice,
-      videoUrl: "",       
-      publicId: "",       
+      videoUrl: "",
+      publicId: "",
       thumbnail: "",
-      duration: Math.round(duration || 0),
-      moderationStatus: "pending", 
+      duration: probe.duration,
+      moderationStatus: "pending",
+      moderationSource: null,
+      decisionVersion: 1,
       aiFeedback: "",
       aiConfidence: 0,
-      processingStatus: "queued",
-      status: "inactive", 
-    });
-
-    // FFMPEG sıxışdırma, R2 upload və AI Moderasiyası eyni vaxtda başlayır
-    enqueueVideoProcessing({
-      videoId: video._id,
-      tempFilePath,
-      originalExt,
+      processingStatus: "uploaded",
+      status: "inactive",
+      stagingKey,
       categoryName: category.name,
-      duration: Math.round(duration || 0),
+      sourceBytes: req.file.size,
+      uploadId: req.uploadId,
+      originalExt,
     });
 
-    const queueStats = getQueueStats();
-
+    await uploadFileToR2(tempFilePath, "talkmart/staging", req.file.mimetype || "video/mp4", originalExt, stagingKey);
+    video.processingStatus = "queued";
+    await video.save();
+    pendingVideo = null;
+    observe("upload_ack_ms", Date.now() - started);
+    const queueStats = await getQueueStats();
     return res.status(201).json({
       success: true,
       message: "Video uğurla yükləndi və emal növbəsinə əlavə edildi.",
@@ -117,31 +128,35 @@ export const createVideo = async (req, res) => {
       queue: {
         position: queueStats.queued,
         running: queueStats.running,
-      }
+      },
     });
   } catch (err) {
-    console.error("createVideo error:", err);
+    logger.error("createVideo error:", err);
     if (err.name === "TimeoutError" || err.message?.includes("timeout")) {
-      return res.status(408).json({ error: "NETWORK_ERROR", message: "Bağlantı zaman aşımına uğraudı." });
+      return fail(res, 408, "NETWORK_ERROR", "Bağlantı zaman aşımına uğraudı.");
     }
-    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası baş verdi. Zəhmət olmasa yenidən cəhd edin." });
+    return fail(res, 500, "SERVER_ERROR", "Server xətası baş verdi. Zəhmət olmasa yenidən cəhd edin.");
+  } finally {
+    unlinkQuiet(tempFilePath);
+    if (pendingVideo) await Video.updateOne({ _id: pendingVideo._id }, { $set: { status: "deleting", processingStatus: "deleting" } });
+    await req.releaseUpload?.();
   }
 };
 
 // GET /api/videos/my-videos
 export const getMyVideos = async (req, res) => {
   try {
-    const videos = await Video.find({ providerId: req.user._id }).sort({
-      createdAt: -1,
-    });
+    const { page, limit, skip } = parsePagination(req.query);
+    const videos = await Video.find({ providerId: req.user._id, status: { $ne: "deleting" }, ...cursorFilter(req.query.cursor) }).sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limit).maxTimeMS(5000);
+
 
     return res.status(200).json({
       success: true,
       count: videos.length,
-      videos,
+      videos, page, nextCursor: nextCursor(videos, limit),
     });
   } catch (err) {
-    console.error("getMyVideos error:", err);
+    logger.error("getMyVideos error:", err);
     return res.status(500).json({ message: "Server xətası." });
   }
 };
@@ -149,41 +164,17 @@ export const getMyVideos = async (req, res) => {
 // DELETE /api/videos/:id
 export const deleteVideo = async (req, res) => {
   try {
-    const video = await Video.findOne({
-      _id: req.params.id,
-      providerId: req.user._id,
-    });
-
-    if (!video) {
-      return res.status(404).json({ message: "Video tapılmadı." });
+    const deleted = await deleteVideoCompletely(req.params.id, { providerId: req.user._id });
+    if (!deleted) {
+      return fail(res, 404, "NOT_FOUND", "Video tapılmadı.");
     }
-
-    // R2-dən video faylını sil
-    await deleteFromR2(video.publicId);
-
-    // Əgər thumbnail varsa onu da sil
-    if (video.thumbnail) {
-      // Thumbnail key-ni URL-dən çıxar
-      try {
-        const thumbUrl = new URL(video.thumbnail);
-        const thumbKey = thumbUrl.pathname.replace(/^\//, "");
-        await deleteFromR2(thumbKey);
-      } catch (_) {
-        // thumbnail URL parse olunmazsa keç
-      }
-    }
-
-    await video.deleteOne();
-    await delCachePattern("feed:*");
-    await delCachePattern("categories:top:*");
-
     return res.status(200).json({
       success: true,
       message: "Video silindi.",
     });
   } catch (err) {
-    console.error("deleteVideo error:", err);
-    return res.status(500).json({ message: "Server xətası." });
+    logger.error("deleteVideo error:", err);
+    return fail(res, 500, "SERVER_ERROR", "Server xətası.");
   }
 };
 
@@ -196,17 +187,14 @@ export const deleteVideo = async (req, res) => {
 // BİRLƏŞDİRİLMİŞ API: provider phone, likeCount, saveCount, isLiked, isSaved hamısı bir response-da
 export const getFeedVideos = async (req, res) => {
   try {
-    const limit = parseInt(req.query.limit) || 10;
+    let limit;
+    try {
+      ({ limit } = parsePagination(req.query, { limit: 10 }));
+    } catch (e) {
+      return fail(res, 400, e.code || "INVALID_PAGINATION", e.message);
+    }
     const userId = req.user?._id || null;
 
-    // Guest istifadəçilər üçün 30 saniyəlik Redis keşi
-    const cacheKey = !userId ? `feed:guest:${limit}` : null;
-    if (cacheKey) {
-      const cached = await getCache(cacheKey);
-      if (cached && cached.length > 0) {
-        return res.status(200).json({ success: true, count: cached.length, videos: cached });
-      }
-    }
     let blockedIds = [];
 
     if (userId) {
@@ -219,7 +207,7 @@ export const getFeedVideos = async (req, res) => {
       ];
     }
 
-    const matchStage = { status: "active" };
+    const matchStage = publicVideoFilter();
     if (blockedIds.length > 0) {
       matchStage.providerId = { $nin: blockedIds };
     }
@@ -237,6 +225,7 @@ export const getFeedVideos = async (req, res) => {
         },
       },
       { $unwind: "$provider" },
+      { $match: publicOwnerFilter() },
     ];
 
     // Login olmuş istifadəçi üçün isLiked / isSaved əlavə et
@@ -302,14 +291,7 @@ export const getFeedVideos = async (req, res) => {
         viewCount: 1,
         saveCount: 1,
         createdAt: 1,
-        provider: {
-          _id: "$provider._id",
-          fullName: "$provider.fullName",
-          companyName: "$provider.providerProfile.companyName",
-          phone: "$provider.phone",
-          address: "$provider.providerProfile.address",
-          profileImage: "$provider.profileImage",
-        },
+        provider: providerPublicFields(Boolean(userId)),
         isLiked: userId
           ? { $gt: [{ $size: "$userLike" }, 0] }
           : { $literal: false },
@@ -319,15 +301,11 @@ export const getFeedVideos = async (req, res) => {
       },
     });
 
-    const videos = await Video.aggregate(pipeline);
-
-    if (cacheKey && videos.length > 0) {
-      await setCache(cacheKey, videos, 30); // 30 saniyə keşlə
-    }
+    const videos = await Video.aggregate(pipeline).option({ maxTimeMS: 5000 });
 
     return res.status(200).json({ success: true, count: videos.length, videos });
   } catch (err) {
-    console.error("getFeedVideos error:", err);
+    logger.error("getFeedVideos error:", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
   }
 };
@@ -337,9 +315,12 @@ export const getFeedVideos = async (req, res) => {
 // BİRLƏŞDİRİLMİŞ API: provider phone, isLiked, isSaved hamısı bir response-da
 export const getExploreVideos = async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 15;
-    const skip = (page - 1) * limit;
+    let page, limit, skip;
+    try {
+      ({ page, limit, skip } = parsePagination(req.query, { limit: 15 }));
+    } catch (e) {
+      return fail(res, 400, e.code || "INVALID_PAGINATION", e.message);
+    }
     const userId = req.user?._id || null;
 
     const { categoryId, search, sort, location, minPrice, maxPrice } = req.query;
@@ -355,7 +336,8 @@ export const getExploreVideos = async (req, res) => {
       ];
     }
 
-    const matchStage = { status: "active" };
+    const matchStage = { ...publicVideoFilter(), ...cursorFilter(req.query.cursor) };
+    if (matchStage.$or) matchStage.$or[1]._id.$lt = new mongoose.Types.ObjectId(matchStage.$or[1]._id.$lt);
     if (blockedIds.length > 0) {
       matchStage.providerId = { $nin: blockedIds };
     }
@@ -363,15 +345,14 @@ export const getExploreVideos = async (req, res) => {
 
     // Kateqoriya filteri
     if (categoryId) {
+      if (!isValidObjectId(categoryId)) {
+        return fail(res, 400, "INVALID_CATEGORY", "Kateqoriya ID formatı yanlışdır.");
+      }
       matchStage.categoryId = new mongoose.Types.ObjectId(String(categoryId));
     }
 
     // Ad / açıqlama axtarışı
-    if (search) {
-      const safeSearch = String(search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const searchRegex = new RegExp(safeSearch, "i");
-      matchStage.$or = [{ title: searchRegex }, { description: searchRegex }];
-    }
+    if (search) matchStage.$text = { $search: search };
 
     // Qiymət aralığı filteri
     if (minPrice !== undefined || maxPrice !== undefined) {
@@ -384,10 +365,10 @@ export const getExploreVideos = async (req, res) => {
       }
     }
 
-    let sortOption = { createdAt: -1 }; // default: ən yenilər
+    let sortOption = { createdAt: -1, _id: -1 }; // default: ən yenilər
     if (sort === "trending") sortOption = { viewCount: -1, likeCount: -1 };
-    else if (sort === "price_low") sortOption = { price: 1 };
-    else if (sort === "price_high") sortOption = { price: -1 };
+    else if (sort === "price_low") sortOption = { price: 1, _id: -1 };
+    else if (sort === "price_high") sortOption = { price: -1, _id: -1 };
 
     const basePipeline = [
       { $match: matchStage },
@@ -401,6 +382,7 @@ export const getExploreVideos = async (req, res) => {
         },
       },
       { $unwind: "$provider" },
+      { $match: publicOwnerFilter() },
     ];
 
     // Location filteri — provider-in address-inə görə filtrləyirik
@@ -479,14 +461,7 @@ export const getExploreVideos = async (req, res) => {
         viewCount: 1,
         saveCount: 1,
         createdAt: 1,
-        provider: {
-          _id: "$provider._id",
-          fullName: "$provider.fullName",
-          companyName: "$provider.providerProfile.companyName",
-          phone: "$provider.phone",
-          address: "$provider.providerProfile.address",
-          profileImage: "$provider.profileImage",
-        },
+        provider: providerPublicFields(Boolean(userId)),
         isLiked: userId
           ? { $gt: [{ $size: "$userLike" }, 0] }
           : { $literal: false },
@@ -503,7 +478,7 @@ export const getExploreVideos = async (req, res) => {
       },
     });
 
-    const result = await Video.aggregate(basePipeline);
+    const result = await Video.aggregate(basePipeline).option({ maxTimeMS: 5000 });
     const total = result[0]?.metadata[0]?.total || 0;
     const videos = result[0]?.data || [];
 
@@ -513,10 +488,11 @@ export const getExploreVideos = async (req, res) => {
       total,
       page,
       totalPages: Math.ceil(total / limit),
+      nextCursor: !sort || sort === "newest" ? nextCursor(videos, limit) : null,
       videos,
     });
   } catch (err) {
-    console.error("getExploreVideos error:", err);
+    logger.error("getExploreVideos error:", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
   }
 };
@@ -530,17 +506,19 @@ export const getPublicVideoById = async (req, res) => {
       return res.status(404).json({ error: "NOT_FOUND", message: "Video tapılmadı." });
     }
 
-    const video = await Video.findOne({ _id: id, status: "active" })
-      .select("title description thumbnail videoUrl duration viewCount likeCount createdAt")
+    const video = await Video.findOne({ _id: id, ...publicVideoFilter() })
+      .populate("providerId", "isBlocked accountStatus emailVerified")
+      .select("title description thumbnail videoUrl duration viewCount likeCount createdAt providerId")
       .lean();
 
-    if (!video) {
+    if (!video || !video.providerId || video.providerId.isBlocked || video.providerId.accountStatus === "deleting" || !video.providerId.emailVerified) {
       return res.status(404).json({ error: "NOT_FOUND", message: "Video tapılmadı və ya aktiv deyil." });
     }
 
+    delete video.providerId;
     return res.status(200).json({ success: true, video });
   } catch (err) {
-    console.error("getPublicVideoById error:", err);
+    logger.error("getPublicVideoById error:", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
   }
 };

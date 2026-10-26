@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  verifyProvider, getReports, updateReport, getOperations, retryVideo, retryReportNotification,
   createOnboarding,
   updateOnboarding,
   deleteOnboarding,
@@ -21,7 +22,15 @@ import {
 import { verifyToken, adminOnly } from "../middlewares/auth.middleware.js";
 import { uploadImage } from "../middlewares/upload.middleware.js";
 
+import { validateId } from "../middlewares/api.middleware.js";
 const router = Router();
+router.param("id", validateId);
+router.patch("/users/:id/verify-provider", verifyToken, adminOnly, verifyProvider);
+router.get("/reports", verifyToken, adminOnly, getReports);
+router.patch("/reports/:id", verifyToken, adminOnly, updateReport);
+router.post("/reports/:id/retry-notification", verifyToken, adminOnly, retryReportNotification);
+router.get("/operations", verifyToken, adminOnly, getOperations);
+router.post("/videos/:id/retry", verifyToken, adminOnly, retryVideo);
 
 // ============================
 // İSTİFADƏÇİ ROUTE-ları

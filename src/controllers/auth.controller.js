@@ -1,13 +1,20 @@
+import { logger } from "../utils/logger.js";
 import { z } from "zod";
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import Otp from "../models/Otp.js";
 import Category from "../models/Category.js";
 import { sendEmailOtp } from "../utils/email.js";
-import { signAccessToken } from "../utils/jwt.js";
+import {
+  signAccessToken,
+  signPasswordResetToken,
+  verifyPasswordResetToken,
+} from "../utils/jwt.js";
+import { generateOtpCode, hashOtp, consumeOtp } from "../utils/otp.js";
+import { delCache } from "../config/redis.js";
 import mongoose from "mongoose";
+import AuditEvent from "../models/AuditEvent.js";
 
 const normalizeEmail = (e) =>
   String(e || "")
@@ -15,18 +22,15 @@ const normalizeEmail = (e) =>
     .toLowerCase();
 const normalizePhone = (p) => String(p || "").trim();
 
-const gen6 = () => String(Math.floor(100000 + Math.random() * 900000));
-const sha256 = (s) =>
-  crypto.createHash("sha256").update(String(s)).digest("hex");
-
 async function createOrUpdateOtp({ email, purpose }) {
-  const code = gen6();
+  const code = generateOtpCode();
   const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
+  const otpHash = hashOtp(purpose, email, code);
 
   await Otp.findOneAndUpdate(
     { email, purpose },
     {
-      otpHash: sha256(code),
+      otpHash,
       expiresAt,
       attemptsLeft: 5,
       lastSentAt: new Date(),
@@ -43,7 +47,7 @@ const userRegisterSchema = z.object({
   fullName: z.string().trim().min(2),
   phone: z.string().trim().min(7),
   email: z.string().trim().email(),
-  password: z.string().min(6),
+  password: z.string().min(6).max(72),
 });
 
 export async function registerUser(req, res) {
@@ -80,9 +84,10 @@ export async function registerUser(req, res) {
       password: hashedPassword,
       providerProfile: null,
       emailVerified: false,
+      sessionVersion: 1,
     });
 
-    // ✅ register-dən sonra OTP göndər
+    // register-dən sonra OTP göndər
     await createOrUpdateOtp({ email, purpose: "register" });
 
     return res.status(201).json({
@@ -91,7 +96,7 @@ export async function registerUser(req, res) {
       next: "register_verify_otp",
     });
   } catch (e) {
-    console.error(e);
+    logger.error(e);
     return res.status(500).json({ error: "Server xətası" });
   }
 }
@@ -107,8 +112,8 @@ const providerRegisterSchema = z
     phone:           z.string().trim().min(7),
     categoryId:      z.string().trim().min(1),
     address:         z.string().trim().min(2),
-    password:        z.string().min(6),
-    confirmPassword: z.string().min(6),
+    password:        z.string().min(6).max(72),
+    confirmPassword: z.string().min(6).max(72),
   })
   .refine((d) => d.password === d.confirmPassword, {
     message: "Şifrələr uyğun gəlmir",
@@ -167,6 +172,7 @@ export async function registerProvider(req, res) {
         verified:    false,
       },
       emailVerified: false,
+      sessionVersion: 1,
     });
 
     await createOrUpdateOtp({ email, purpose: "register" });
@@ -177,7 +183,7 @@ export async function registerProvider(req, res) {
       next: "register_verify_otp",
     });
   } catch (e) {
-    console.error(e);
+    logger.error(e);
     return res.status(500).json({ error: "Server xətası" });
   }
 }
@@ -186,7 +192,7 @@ export async function registerProvider(req, res) {
 
 const verifyRegisterOtpSchema = z.object({
   email: z.string().trim().email(),
-  code: z.string().trim().length(6),
+  code: z.string().trim().regex(/^\d{6}$/),
 });
 
 export async function verifyRegisterOtp(req, res) {
@@ -201,38 +207,25 @@ export async function verifyRegisterOtp(req, res) {
     const code = String(parsed.data.code).trim();
     const purpose = "register";
 
-    const record = await Otp.findOne({ email, purpose });
-    if (!record) return res.status(400).json({ error: "OTP tapılmadı" });
-
-    if (record.expiresAt.getTime() < Date.now()) {
-      await Otp.deleteOne({ _id: record._id });
-      return res.status(400).json({ error: "OTP vaxtı bitib" });
+    const otpResult = await consumeOtp({ email, purpose, code });
+    if (!otpResult.ok) {
+      return res.status(otpResult.status).json({ error: otpResult.error });
     }
-
-    if (record.attemptsLeft <= 0) {
-      await Otp.deleteOne({ _id: record._id });
-      return res.status(429).json({ error: "Çox cəhd edildi" });
-    }
-
-    const ok = sha256(code) === record.otpHash;
-    if (!ok) {
-      record.attemptsLeft -= 1;
-      await record.save();
-      return res.status(400).json({ error: "OTP yanlışdır" });
-    }
-
-    await Otp.deleteOne({ _id: record._id });
 
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ error: "User tapılmadı" });
 
-    // ✅ email verified
+    // email verified
     if (!user.emailVerified) {
       user.emailVerified = true;
       await user.save();
     }
 
-    const token = signAccessToken({ id: user._id.toString(), role: user.role });
+    const token = signAccessToken({
+      id: user._id.toString(),
+      role: user.role,
+      sv: user.sessionVersion || 1,
+    });
 
     return res.json({
       message: "Qeydiyyat təsdiqləndi",
@@ -249,7 +242,7 @@ export async function verifyRegisterOtp(req, res) {
       },
     });
   } catch (e) {
-    console.error(e);
+    logger.error(e);
     return res.status(500).json({ error: "Server xətası" });
   }
 }
@@ -284,7 +277,7 @@ export async function resendRegisterOtp(req, res) {
 
     return res.json({ message: "Yeni OTP göndərildi", email });
   } catch (e) {
-    console.error(e);
+    logger.error(e);
     return res.status(500).json({ error: "Server xətası" });
   }
 }
@@ -326,15 +319,19 @@ export async function login(req, res) {
       });
     }
 
-    // Admin tərəfindən bloklanıbsa girişə icazə verilmir
-    if (user.isBlocked) {
+    // Admin tərəfindən bloklanıbsa girişə icazə verilmir (TM-005)
+    if (user.isBlocked || user.accountStatus === "deleting") {
       return res.status(403).json({
         error: "ACCOUNT_BLOCKED",
         message: "Hesabınız admin tərəfindən bloklanmışdır. Ətraflı məlumat üçün bizimlə əlaqə saxlayın.",
       });
     }
 
-    const token = signAccessToken({ id: user._id.toString(), role: user.role });
+    const token = signAccessToken({
+      id: user._id.toString(),
+      role: user.role,
+      sv: user.sessionVersion || 1,
+    });
 
     return res.json({
       message: "Giriş uğurlu",
@@ -351,7 +348,7 @@ export async function login(req, res) {
       },
     });
   } catch (e) {
-    console.error(e);
+    logger.error(e);
     return res.status(500).json({ error: "Server xətası" });
   }
 }
@@ -387,7 +384,7 @@ export async function forgotPassword(req, res) {
       email,
     });
   } catch (e) {
-    console.error(e);
+    logger.error(e);
     return res.status(500).json({ error: "Server xətası" });
   }
 }
@@ -396,7 +393,7 @@ export async function forgotPassword(req, res) {
 
 const verifyForgotOtpSchema = z.object({
   email: z.string().trim().email(),
-  code: z.string().trim().length(6),
+  code: z.string().trim().regex(/^\d{6}$/),
 });
 
 export async function verifyForgotOtp(req, res) {
@@ -411,44 +408,31 @@ export async function verifyForgotOtp(req, res) {
     const code = String(parsed.data.code).trim();
     const purpose = "forgot_password";
 
-    const record = await Otp.findOne({ email, purpose });
-    if (!record) return res.status(400).json({ error: "OTP tapılmadı" });
-
-    if (record.expiresAt.getTime() < Date.now()) {
-      await Otp.deleteOne({ _id: record._id });
-      return res.status(400).json({ error: "OTP vaxtı bitib" });
+    const otpResult = await consumeOtp({ email, purpose, code });
+    if (!otpResult.ok) {
+      return res.status(otpResult.status).json({ error: otpResult.error });
     }
-
-    if (record.attemptsLeft <= 0) {
-      await Otp.deleteOne({ _id: record._id });
-      return res.status(429).json({ error: "Çox cəhd edildi" });
-    }
-
-    const ok = sha256(code) === record.otpHash;
-    if (!ok) {
-      record.attemptsLeft -= 1;
-      await record.save();
-      return res.status(400).json({ error: "OTP yanlışdır" });
-    }
-
-    await Otp.deleteOne({ _id: record._id });
 
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ error: "User tapılmadı" });
 
-    // Qısa ömürlü reset token (15 dəqiqə)
-    const resetToken = jwt.sign(
-      { id: user._id.toString(), purpose: "reset_password" },
-      process.env.JWT_SECRET,
-      { expiresIn: "15m" },
-    );
+    // Birdəfəlik jti generatoru (TM-006)
+    const jti = crypto.randomUUID();
+    const jtiHash = crypto.createHash("sha256").update(jti).digest("hex");
+    await User.updateOne({ _id: user._id, accountStatus: { $ne: "deleting" } }, { $set: { resetTokenHash: jtiHash, resetTokenExpiresAt: new Date(Date.now() + 900000) } });
+
+    // Qısa ömürlü, təcrid olunmuş reset token (TM-004)
+    const resetToken = signPasswordResetToken({
+      id: user._id.toString(),
+      jti,
+    });
 
     return res.json({
       message: "OTP təsdiqləndi, şifrəni sıfırlaya bilərsiniz",
       resetToken,
     });
   } catch (e) {
-    console.error(e);
+    logger.error(e);
     return res.status(500).json({ error: "Server xətası" });
   }
 }
@@ -457,7 +441,7 @@ export async function verifyForgotOtp(req, res) {
 
 const resetPasswordSchema = z.object({
   resetToken: z.string().min(1),
-  newPassword: z.string().min(6),
+  newPassword: z.string().min(6).max(72),
 });
 
 export async function resetPassword(req, res) {
@@ -470,23 +454,31 @@ export async function resetPassword(req, res) {
 
     let payload;
     try {
-      payload = jwt.verify(parsed.data.resetToken, process.env.JWT_SECRET);
+      payload = verifyPasswordResetToken(parsed.data.resetToken);
     } catch {
       return res.status(400).json({ error: "Reset token etibarsızdır və ya vaxtı bitib" });
     }
 
-    if (payload.purpose !== "reset_password")
-      return res.status(400).json({ error: "Yanlış token növü" });
+    // Atomik birdəfəlik jti istehlakı (TM-006)
+    const jtiHash = crypto.createHash("sha256").update(payload.jti || "").digest("hex");
+    const password = await bcrypt.hash(parsed.data.newPassword, 10);
+    // Nonce consumption, password write and session revocation are one DB operation.
+    const user = await User.findOneAndUpdate({
+      _id: payload.id, resetTokenHash: jtiHash,
+      resetTokenExpiresAt: { $gt: new Date() }, accountStatus: { $ne: "deleting" },
+    }, {
+      $set: { password, resetTokenHash: null, resetTokenExpiresAt: null },
+      $inc: { sessionVersion: 1 },
+    }, { returnDocument: "after", runValidators: true });
+    if (!user) return res.status(401).json({ error: "RESET_TOKEN_USED", message: "Reset token unavailable" });
+    await AuditEvent.create({ targetId: user._id, action: "password_reset" });
 
-    const user = await User.findById(payload.id);
-    if (!user) return res.status(404).json({ error: "User tapılmadı" });
-
-    user.password = await bcrypt.hash(parsed.data.newPassword, 10);
-    await user.save();
+    // Redis sessiya keşini təmizlə
+    await delCache(`user:session:${user._id}`);
 
     return res.json({ message: "Şifrə uğurla yeniləndi" });
   } catch (e) {
-    console.error(e);
+    logger.error(e);
     return res.status(500).json({ error: "Server xətası" });
   }
 }

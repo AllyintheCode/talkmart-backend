@@ -1,0 +1,32 @@
+services:
+  api:
+    build: .
+    env_file: .env
+    ports:
+      - "5000:5000"
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    mem_limit: 768m
+    cpus: 1
+    pids_limit: 128
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+  worker:
+    build: .
+    command: ["node", "src/worker.js"]
+    env_file: .env
+    environment:
+      VIDEO_WORKER_CONCURRENCY: 1
+    init: true
+    restart: unless-stopped
+    read_only: true
+    tmpfs:
+      - /tmp:size=1g,mode=1777
+    mem_limit: 1536m
+    cpus: 2
+    pids_limit: 128
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]

@@ -2,8 +2,8 @@ export default {
   "openapi": "3.0.0",
   "info": {
     "title": "TalkMart API Sənədləri",
-    "description": "Flutter tərtibatçıları üçün Backend API endpointləri. Autentifikasiya və Video xidmətlərini ehtiva edir.",
-    "version": "1.0.0"
+    "description": "Flutter tərtibatçıları üçün Backend API endpointləri. Autentifikasiya və Video xidmətlərini ehtiva edir. Access JWTs require issuer, audience, typ=access and sessionVersion. Old tokens require re-login. API errors use error.code and error.message.",
+    "version": "1.1.0"
   },
   "servers": [
     {
@@ -21,6 +21,39 @@ export default {
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "ApiError": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": false
+          },
+          "data": {
+            "nullable": true
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "requestId": {
+                "type": "string"
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -1311,24 +1344,6 @@ export default {
         "parameters": [
           {
             "in": "query",
-            "name": "page",
-            "schema": {
-              "type": "integer",
-              "default": 1
-            },
-            "description": "Səhifə nömrəsi"
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "schema": {
-              "type": "integer",
-              "default": 15
-            },
-            "description": "Hər səhifədəki video sayı"
-          },
-          {
-            "in": "query",
             "name": "categoryId",
             "schema": {
               "type": "string"
@@ -1380,6 +1395,33 @@ export default {
               "type": "number"
             },
             "description": "Maksimum qiymət (məs: 500)"
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string",
+              "description": "Use nextCursor from the previous page with newest sort"
+            }
           }
         ],
         "responses": {
@@ -1898,7 +1940,18 @@ export default {
           "403": {
             "description": "Qadağan edilib (İstifadəçi Provider deyil)"
           }
-        }
+        },
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 100
+            }
+          }
+        ]
       }
     },
     "/videos/my-videos": {
@@ -1917,7 +1970,36 @@ export default {
           "403": {
             "description": "Qadağan edilib (Provider deyil)"
           }
-        }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string",
+              "description": "Use nextCursor from the previous page with newest sort"
+            }
+          }
+        ]
       }
     },
     "/videos/{id}": {
@@ -1952,7 +2034,112 @@ export default {
     },
     "/videos/{id}/like": {
       "post": {
-        "summary": "Videonu bəyən / bəyənməkdən voz keç (Toggle Like)",
+        "summary": "Set like state (idempotent; defaults to true)",
+        "description": "🔐 **LOGIN TƏLƏB OLUNUR** — Token olmadan `LOGIN_REQUIRED` xətası qaytarılır. Mobil tətbiq bu xətaı alıb istifadəçini login ekranına aparmalıdır.\n\nBäyənmək və ya bəyənməkdən çıxarmaq üçün istifadə olunur. Anti-fake: Öz videolarınızı bəyənə bilməzsiniz. Rate limit: dəqiqədə 30 istək.",
+        "tags": [
+          "Engagement"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Videonun MongoDB ObjectId-si",
+            "example": "64efc9abc1234567890def12"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bəyənmə statusunu və yenilənmiş likeCount (bəyənmə sayını) qaytarır.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "liked": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "likeCount": {
+                      "type": "integer",
+                      "example": 42
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Like edildi."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Keçərsiz video ID formatı"
+          },
+          "401": {
+            "description": "🔐 Token yoxdur → LOGIN_REQUIRED — Mobil bu kodu alıb login ekranına yönləndirir",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "LOGIN_REQUIRED"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Bu əməliyyat üçün giriş tələb olunur."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Öz videonuzu bəyənə bilməzsiniz"
+          },
+          "404": {
+            "description": "Video tapılmadı"
+          },
+          "429": {
+            "description": "Çox saydə istək (rate limit aşıldı)"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "liked": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove like (idempotent)",
         "description": "🔐 **LOGIN TƏLƏB OLUNUR** — Token olmadan `LOGIN_REQUIRED` xətası qaytarılır. Mobil tətbiq bu xətaı alıb istifadəçini login ekranına aparmalıdır.\n\nBäyənmək və ya bəyənməkdən çıxarmaq üçün istifadə olunur. Anti-fake: Öz videolarınızı bəyənə bilməzsiniz. Rate limit: dəqiqədə 30 istək.",
         "tags": [
           "Engagement"
@@ -2044,7 +2231,112 @@ export default {
     },
     "/videos/{id}/save": {
       "post": {
-        "summary": "Videonu yadda saxla / yaddaşdan sil (Toggle Save/Bookmark)",
+        "summary": "Set save state (idempotent; defaults to true)",
+        "description": "🔐 **LOGIN TƏLƏB OLUNUR** — Token olmadan `LOGIN_REQUIRED` xətası qaytarılır. Mobil tətbiq bu xətaı alıb istifadəçini login ekranına aparmalıdır.\n\nYadda saxlamaq və ya silmək. Anti-fake: Öz videolarınızı yadda saxlaya bilməzsiniz. Rate limit: dəqiqədə 30 istək.",
+        "tags": [
+          "Engagement"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Videonun MongoDB ObjectId-si",
+            "example": "64efc9abc1234567890def12"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Yadda saxlama statusunu və yenilnmiş saveCount qaytarır.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "saved": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "saveCount": {
+                      "type": "integer",
+                      "example": 15
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Video kayd edildi."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Keçərsiz video ID formatı"
+          },
+          "401": {
+            "description": "🔐 Token yoxdur → LOGIN_REQUIRED — Mobil bu kodu alıb login ekranına yönləndirir",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": false
+                    },
+                    "error": {
+                      "type": "string",
+                      "example": "LOGIN_REQUIRED"
+                    },
+                    "message": {
+                      "type": "string",
+                      "example": "Bu əməliyyat üçün giriş tələb olunur."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Öz videonuzu yadda saxlaya bilməzsiniz"
+          },
+          "404": {
+            "description": "Video tapılmadı"
+          },
+          "429": {
+            "description": "Çox saydə istək (rate limit aşıldı)"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "saved": {
+                    "type": "boolean",
+                    "default": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove save (idempotent)",
         "description": "🔐 **LOGIN TƏLƏB OLUNUR** — Token olmadan `LOGIN_REQUIRED` xətası qaytarılır. Mobil tətbiq bu xətaı alıb istifadəçini login ekranına aparmalıdır.\n\nYadda saxlamaq və ya silmək. Anti-fake: Öz videolarınızı yadda saxlaya bilməzsiniz. Rate limit: dəqiqədə 30 istək.",
         "tags": [
           "Engagement"
@@ -2191,6 +2483,25 @@ export default {
           },
           "429": {
             "description": "Çox sayda istək (rate limit aşıldı)"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "watchedMs"
+                ],
+                "properties": {
+                  "watchedMs": {
+                    "type": "number",
+                    "minimum": 2000
+                  }
+                }
+              }
+            }
           }
         }
       }
@@ -2394,7 +2705,11 @@ export default {
         "tags": [
           "User"
         ],
-        "security": [],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "parameters": [
           {
             "in": "path",
@@ -2523,7 +2838,36 @@ export default {
           "403": {
             "description": "Bu əməliyyat yalnız adminlər üçündür"
           }
-        }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string",
+              "description": "Use nextCursor from the previous page with newest sort"
+            }
+          }
+        ]
       }
     },
     "/admin/users/{id}/block": {
@@ -3240,7 +3584,36 @@ export default {
           "200": {
             "description": "Videolar siyahısı"
           }
-        }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string",
+              "description": "Use nextCursor from the previous page with newest sort"
+            }
+          }
+        ]
       }
     },
     "/admin/videos/{id}": {
@@ -3336,7 +3709,36 @@ export default {
           "200": {
             "description": "Moderasiya gözləyən videolar siyahısı"
           }
-        }
+        },
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string",
+              "description": "Use nextCursor from the previous page with newest sort"
+            }
+          }
+        ]
       }
     },
     "/admin/videos/{id}/moderate": {
@@ -3377,8 +3779,9 @@ export default {
                       "reject"
                     ]
                   },
-                  "rejectionReason": {
-                    "type": "string"
+                  "feedback": {
+                    "type": "string",
+                    "maxLength": 2000
                   }
                 }
               }
@@ -3388,6 +3791,295 @@ export default {
         "responses": {
           "200": {
             "description": "Moderasiya tamamlandı"
+          }
+        }
+      }
+    },
+    "/admin/users/{id}/verify-provider": {
+      "patch": {
+        "summary": "Verify or revoke a provider",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Access token required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "verified": {
+                    "type": "boolean"
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 2000
+                  }
+                },
+                "required": [
+                  "verified"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/reports": {
+      "get": {
+        "summary": "List reports with status and overdue filters",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "page",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 50,
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "schema": {
+              "type": "string",
+              "description": "Use nextCursor from the previous page with newest sort"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Access token required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        }
+      }
+    },
+    "/admin/reports/{id}": {
+      "patch": {
+        "summary": "Update report decision and append audit history",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Access token required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "new",
+                      "in_progress",
+                      "resolved",
+                      "rejected"
+                    ]
+                  },
+                  "note": {
+                    "type": "string",
+                    "maxLength": 2000
+                  },
+                  "assignedTo": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/operations": {
+      "get": {
+        "summary": "Queue, worker, cleanup and report metrics",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Access token required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        }
+      }
+    },
+    "/admin/videos/{id}/retry": {
+      "post": {
+        "summary": "Retry a failed video from private staging",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Access token required"
+          },
+          "403": {
+            "description": "Admin role required"
+          }
+        }
+      }
+    },
+    "/admin/reports/{id}/retry-notification": {
+      "post": {
+        "summary": "Retry a failed report notification",
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success"
+          },
+          "400": {
+            "description": "Invalid input"
+          },
+          "401": {
+            "description": "Access token required"
+          },
+          "403": {
+            "description": "Admin role required"
           }
         }
       }

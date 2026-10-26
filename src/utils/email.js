@@ -1,13 +1,17 @@
+import { logger } from "../utils/logger.js";
 import nodemailer from "nodemailer";
 
 const isSecure =
   process.env.SMTP_SECURE === "true" || Number(process.env.SMTP_PORT) === 465;
 
-const transporter = nodemailer.createTransport({
+export const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || "smtp.gmail.com",
   port: process.env.SMTP_PORT ? Number(process.env.SMTP_PORT) : 587,
   secure: isSecure,
   requireTLS: !isSecure,
+  connectionTimeout: 15000,
+  greetingTimeout: 15000,
+  socketTimeout: 30000,
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
@@ -30,7 +34,7 @@ export function getSenderAddress() {
     const emailMatch = from.match(/<([^>]+)>/) || [null, from];
     const emailAddr = (emailMatch[1] || from).trim();
     if (!emailAddr.endsWith("@gmail.com") && !emailAddr.endsWith("@googlemail.com")) {
-      console.warn(
+      logger.warn(
         `[Email Deliverability] Gmail SMTP kənar domenlə (${emailAddr}) göndərişdə SPF/DKIM uyğunsuzluğu və Spam yaradır. From ünvanı "${fromName}" <${smtpUser}> olaraq təyin edildi.`
       );
       return `"${fromName}" <${smtpUser}>`;
@@ -57,7 +61,7 @@ export async function sendEmailOtp(to, code, purpose = "login") {
   const title = titles[purpose] || "Təsdiq kodu";
   const currentYear = new Date().getFullYear();
 
-  console.log(`[OTP DEBUG] Sending OTP ${code} to ${to} for purpose: ${purpose}`);
+  // OTP kodunun loqlanması təhlükəsizlik səbəbilə silindi (TM-002)
 
   const htmlTemplate = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="az" xml:lang="az">
@@ -173,6 +177,6 @@ export async function sendAdminNotification(subject, text) {
       },
     });
   } catch (err) {
-    console.error("Failed to send admin notification:", err);
+    throw err;
   }
 }

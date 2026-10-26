@@ -2,6 +2,7 @@ import multer from "multer";
 import path from "path";
 import os from "os";
 import crypto from "crypto";
+import fs from "node:fs/promises";
 
 // ============================
 // DISK STORAGE (VIDEO) — Video birbaşa SSD diskə axın (stream) şəklində yazılır,
@@ -14,7 +15,9 @@ const videoDiskStorage = multer.diskStorage({
   filename: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase() || ".mp4";
     const tmpId = crypto.randomUUID();
-    cb(null, `upload_${tmpId}${ext}`);
+    const filename = `upload_${tmpId}${ext}`;
+    req.videoTempPath = path.join(os.tmpdir(), filename);
+    cb(null, filename);
   },
 });
 
@@ -58,3 +61,23 @@ export const uploadImage = multer({
   fileFilter: imageFilter,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB per image limit
 });
+
+// Own the temporary path even before Multer has attached req.file.
+export const receiveVideo = (req, res, next) => {
+  const cleanup = () => {
+    const target = req.videoTempPath;
+    if (target) fs.unlink(target).catch(() => {});
+  };
+  req.once("aborted", cleanup);
+  res.once("close", cleanup);
+  uploadVideo.single("video")(req, res, (err) => {
+    if (err || req.aborted) cleanup();
+    if (req.aborted) return;
+    if (err) {
+      err.status = err.code === "LIMIT_FILE_SIZE" ? 413 : err.message?.includes("Yalnız video") ? 415 : 400;
+      err.code = err.code || "INVALID_UPLOAD";
+      return next(err);
+    }
+    next();
+  });
+};

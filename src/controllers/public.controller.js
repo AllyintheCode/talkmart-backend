@@ -1,21 +1,27 @@
+import { logger } from "../utils/logger.js";
 import Onboarding from "../models/Onboarding.js";
 import Category from "../models/Category.js";
 import Video from "../models/Video.js";
+import { getContentVersion } from "../services/publicContent.service.js";
+import { parsePagination } from "../utils/pagination.js";
+import { publicVideoFilter, publicOwnerFilter } from "../services/videoState.service.js";
 import { getCache, setCache } from "../config/redis.js";
 
 // GET /api/onboarding
 export const getOnboardings = async (req, res) => {
   try {
-    const cached = await getCache("onboarding:screens");
+    const contentVersion = await getContentVersion("onboarding");
+    const key = `onboarding:screens:${contentVersion}`;
+    const cached = await getCache(key);
     if (cached) {
-      return res.status(200).json({ success: true, screens: cached });
+      return res.status(200).json({ success: true, screens: cached, contentVersion });
     }
 
     const screens = await Onboarding.find().sort({ order: 1 });
-    await setCache("onboarding:screens", screens, 3600); // 1 saat keş
-    return res.status(200).json({ success: true, screens });
+    await setCache(key, screens, 3600); // 1 saat keş
+    return res.status(200).json({ success: true, screens, contentVersion });
   } catch (err) {
-    console.error("getOnboardings error:", err);
+    logger.error("getOnboardings error:", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
   }
 };
@@ -23,16 +29,18 @@ export const getOnboardings = async (req, res) => {
 // GET /api/categories
 export const getActiveCategories = async (req, res) => {
   try {
-    const cached = await getCache("categories:active");
+    const contentVersion = await getContentVersion("categories");
+    const key = `categories:active:${contentVersion}`;
+    const cached = await getCache(key);
     if (cached) {
-      return res.status(200).json({ success: true, categories: cached });
+      return res.status(200).json({ success: true, categories: cached, contentVersion });
     }
 
     const categories = await Category.find({ status: "active" }).sort({ name: 1 });
-    await setCache("categories:active", categories, 3600); // 1 saat keş
-    return res.status(200).json({ success: true, categories });
+    await setCache(key, categories, 3600); // 1 saat keş
+    return res.status(200).json({ success: true, categories, contentVersion });
   } catch (err) {
-    console.error("getActiveCategories error:", err);
+    logger.error("getActiveCategories error:", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
   }
 };
@@ -41,21 +49,14 @@ export const getActiveCategories = async (req, res) => {
 // Ən çox istifadə olunan kateqoriyalar (aktiv video sayına görə azalan sıra)
 export const getTopCategories = async (req, res) => {
   try {
-    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
-    const cacheKey = `categories:top:${limit}`;
-
-    const cached = await getCache(cacheKey);
-    if (cached) {
-      return res.status(200).json({
-        success: true,
-        count: cached.length,
-        categories: cached,
-      });
-    }
-
+    const { limit } = parsePagination(req.query, { limit: 10 });
+    const contentVersion = await getContentVersion("categories");
     const topCategories = await Video.aggregate([
       // Yalnız aktiv videoları götür
-      { $match: { status: "active" } },
+      { $match: publicVideoFilter() },
+      { $lookup: { from: "users", localField: "providerId", foreignField: "_id", as: "provider" } },
+      { $unwind: "$provider" },
+      { $match: publicOwnerFilter() },
 
       // Kateqoriyaya görə qruplaşdır və video sayını hesabla
       {
@@ -94,9 +95,8 @@ export const getTopCategories = async (req, res) => {
           videoCount: 1,
         },
       },
-    ]);
+    ]).option({ maxTimeMS: 5000 });
 
-    await setCache(cacheKey, topCategories, 600); // 10 dəqiqə keş
 
     return res.status(200).json({
       success: true,
@@ -104,7 +104,7 @@ export const getTopCategories = async (req, res) => {
       categories: topCategories,
     });
   } catch (err) {
-    console.error("getTopCategories error:", err);
+    logger.error("getTopCategories error:", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
   }
 };

@@ -1,11 +1,15 @@
+import { logger } from "../utils/logger.js";
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
-import crypto from "crypto";
-import path from "path";
+import AuditEvent from "../models/AuditEvent.js";
+import { z } from "zod";
 import Otp from "../models/Otp.js";
 import { sendEmailOtp } from "../utils/email.js";
 import { uploadToR2, deleteFromR2 } from "../services/r2Upload.service.js";
 import { compressImage } from "../services/compress.service.js";
+import { generateOtpCode, hashOtp, consumeOtp } from "../utils/otp.js";
+import { invalidateUserSession } from "../middlewares/auth.middleware.js";
+import { deleteUserCompletely } from "../services/accountCleanup.service.js";
 
 // checkAndHashPassword funksiyası silinib, çünki şifrə yenilənməsi ayrıca API-də (changePassword) edilir.
 
@@ -29,7 +33,7 @@ export const getUserProfile = async (req, res) => {
       user,
     });
   } catch (err) {
-    console.error("getUserProfile error:", err);
+    logger.error("getUserProfile error:", err);
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };
@@ -54,7 +58,7 @@ export const getProviderProfile = async (req, res) => {
       provider,
     });
   } catch (err) {
-    console.error("getProviderProfile error:", err);
+    logger.error("getProviderProfile error:", err);
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };
@@ -85,18 +89,23 @@ export const changePassword = async (req, res) => {
       return res.status(400).json({ message: "Cari şifrə yanlışdır." });
     }
 
+    if (typeof newPassword !== "string" || newPassword.length < 6 || newPassword.length > 72) return res.status(400).json({ error: "INVALID_PASSWORD" });
+
     // Yeni şifrəni heşlə və yadda saxla
     const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
-    
-    await user.save();
+    const password = await bcrypt.hash(newPassword, salt);
+    const updated = await User.findOneAndUpdate({ _id: user._id, password: user.password, sessionVersion: user.sessionVersion, isBlocked: false, accountStatus: { $ne: "deleting" } },
+      { $set: { password, resetTokenHash: null, resetTokenExpiresAt: null }, $inc: { sessionVersion: 1 } }, { returnDocument: "after" });
+    if (!updated) return res.status(409).json({ error: "SESSION_CHANGED" });
+    await invalidateUserSession(user._id);
+    await AuditEvent.create({ actorId: user._id, targetId: user._id, action: "password_change" });
 
     return res.json({
       success: true,
       message: "Şifrəniz uğurla yeniləndi.",
     });
   } catch (err) {
-    console.error("changePassword error:", err);
+    logger.error("changePassword error:", err);
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };
@@ -111,7 +120,7 @@ const handleProfileImageUpload = async (user, file) => {
     try {
       await deleteFromR2(user.profileImagePublicId);
     } catch (err) {
-      console.warn("R2 köhnə profil şəkli silinərkən xəta:", err.message);
+      logger.warn("R2 köhnə profil şəkli silinərkən xəta:", err.message);
     }
   }
 
@@ -119,7 +128,7 @@ const handleProfileImageUpload = async (user, file) => {
   const compressed = await compressImage(file.buffer);
   const compressedSize = compressed.buffer.length;
   const savedPercent = ((1 - compressedSize / originalSize) * 100).toFixed(1);
-  console.log(`🖼️ Şəkil sıxışdırma: ${(originalSize / 1024).toFixed(2)}KB → ${(compressedSize / 1024).toFixed(2)}KB (${savedPercent}% azalma)`);
+  logger.log(`🖼️ Şəkil sıxışdırma: ${(originalSize / 1024).toFixed(2)}KB → ${(compressedSize / 1024).toFixed(2)}KB (${savedPercent}% azalma)`);
 
   const { key, url } = await uploadToR2(compressed.buffer, "talkmart/images", compressed.mimetype, compressed.ext);
   user.profileImage = url;
@@ -151,8 +160,8 @@ export const updateUser = async (req, res) => {
         return res.status(409).json({ message: "Bu E-poçt ünvanı artıq istifadə olunur." });
       }
       
-      const code = String(Math.floor(100000 + Math.random() * 900000));
-      const otpHash = crypto.createHash("sha256").update(code).digest("hex");
+      const code = generateOtpCode();
+      const otpHash = hashOtp("email_change", user.email, code);
       
       await Otp.findOneAndUpdate(
         { email: user.email, purpose: "email_change" },
@@ -205,7 +214,7 @@ export const updateUser = async (req, res) => {
       requiresEmailVerification: emailVerificationSent,
     });
   } catch (err) {
-    console.error("updateUser error:", err);
+    logger.error("updateUser error:", err);
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };
@@ -234,8 +243,8 @@ export const updateUserProfile = async (req, res) => {
         return res.status(409).json({ message: "Bu E-poçt ünvanı artıq istifadə olunur." });
       }
 
-      const code = String(Math.floor(100000 + Math.random() * 900000));
-      const otpHash = crypto.createHash("sha256").update(code).digest("hex");
+      const code = generateOtpCode();
+      const otpHash = hashOtp("email_change", user.email, code);
       
       await Otp.findOneAndUpdate(
         { email: user.email, purpose: "email_change" },
@@ -286,7 +295,7 @@ export const updateUserProfile = async (req, res) => {
       requiresEmailVerification: emailVerificationSent,
     });
   } catch (err) {
-    console.error("updateUserProfile error:", err);
+    logger.error("updateUserProfile error:", err);
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };
@@ -315,8 +324,8 @@ export const updateProvider = async (req, res) => {
         return res.status(409).json({ message: "Bu E-poçt ünvanı artıq istifadə olunur." });
       }
 
-      const code = String(Math.floor(100000 + Math.random() * 900000));
-      const otpHash = crypto.createHash("sha256").update(code).digest("hex");
+      const code = generateOtpCode();
+      const otpHash = hashOtp("email_change", user.email, code);
       
       await Otp.findOneAndUpdate(
         { email: user.email, purpose: "email_change" },
@@ -379,7 +388,7 @@ export const updateProvider = async (req, res) => {
       requiresEmailVerification: emailVerificationSent,
     });
   } catch (err) {
-    console.error("updateProvider error:", err);
+    logger.error("updateProvider error:", err);
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };
@@ -391,7 +400,7 @@ export const updateProvider = async (req, res) => {
 // ============================================================
 export const getProviderContact = async (req, res) => {
   try {
-    const provider = await User.findById(req.params.id)
+    const provider = await User.findOne({ _id: req.params.id, isBlocked: false, accountStatus: { $ne: "deleting" } })
       .select("fullName email phone role bio providerProfile")
       .lean();
 
@@ -418,7 +427,7 @@ export const getProviderContact = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("getProviderContact error:", err);
+    logger.error("getProviderContact error:", err);
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };
@@ -428,7 +437,7 @@ export const getProviderContact = async (req, res) => {
 // ============================================================
 export const redirectToWhatsapp = async (req, res) => {
   try {
-    const provider = await User.findById(req.params.id)
+    const provider = await User.findOne({ _id: req.params.id, isBlocked: false, accountStatus: { $ne: "deleting" } })
       .select("phone role providerProfile")
       .lean();
 
@@ -450,7 +459,7 @@ export const redirectToWhatsapp = async (req, res) => {
     // Birbaşa yönləndirmə
     return res.redirect(whatsappUrl);
   } catch (err) {
-    console.error("redirectToWhatsapp error:", err);
+    logger.error("redirectToWhatsapp error:", err);
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };
@@ -483,7 +492,7 @@ export const deleteProfileImage = async (req, res) => {
       message: "Profil şəkli silindi.",
     });
   } catch (err) {
-    console.error("deleteProfileImage error:", err);
+    logger.error("deleteProfileImage error:", err);
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };
@@ -513,31 +522,15 @@ export const verifyEmailChange = async (req, res) => {
       return res.status(400).json({ message: "Email dəyişmə tələbi tapılmadı. Yenidən cəhd edin." });
     }
 
-    // Vaxt yoxlaması
-    if (record.expiresAt.getTime() < Date.now()) {
-      await Otp.deleteOne({ _id: record._id });
-      return res.status(400).json({ message: "OTP-nin vaxtı bitib. Yenidən email dəyişmə tələbi göndərin." });
-    }
-
-    // Cəhd sayı yoxlaması
-    if (record.attemptsLeft <= 0) {
-      await Otp.deleteOne({ _id: record._id });
-      return res.status(429).json({ message: "Çox cəhd edildi. Yenidən email dəyişmə tələbi göndərin." });
-    }
-
-    // OTP hash yoxlaması
-    const inputHash = crypto.createHash("sha256").update(String(code).trim()).digest("hex");
-    if (inputHash !== record.otpHash) {
-      record.attemptsLeft -= 1;
-      await record.save();
-      return res.status(400).json({
-        message: "OTP yanlışdır.",
-        attemptsLeft: record.attemptsLeft,
+    const otpResult = await consumeOtp({ email: user.email, purpose: "email_change", code });
+    if (!otpResult.ok) {
+      return res.status(otpResult.status).json({
+        message: otpResult.error,
+        attemptsLeft: otpResult.attemptsLeft,
       });
     }
 
-    // OTP doğrudur — yeni emailə keç
-    const newEmail = record.newEmail;
+    const newEmail = otpResult.record.newEmail;
 
     // Yeni emailin başqa istifadəçidə olmadığını yenidən yoxla
     const emailTaken = await User.findOne({ email: newEmail });
@@ -560,7 +553,7 @@ export const verifyEmailChange = async (req, res) => {
       user: updatedUser,
     });
   } catch (err) {
-    console.error("verifyEmailChange error:", err);
+    logger.error("verifyEmailChange error:", err);
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };
@@ -578,27 +571,14 @@ export const deleteAccount = async (req, res) => {
       return res.status(404).json({ message: "İstifadəçi tapılmadı." });
     }
 
-    // Əgər istifadəçinin şəkli varsa, R2-dən sil
-    if (user.profileImagePublicId) {
-      try {
-        await deleteFromR2(user.profileImagePublicId);
-      } catch (err) {
-        console.warn("R2 profil şəkli silinərkən xəta (hesab silinmə):", err.message);
-      }
-    }
-
-    // Otp modelindən istifadəçiyə aid məlumatları təmizlə
-    await Otp.deleteMany({ email: user.email });
-
-    // İstifadəçini sil
-    await User.findByIdAndDelete(userId);
+    await deleteUserCompletely(userId);
 
     return res.json({
       success: true,
-      message: "Hesabınız uğurla silindi.",
+      message: "Hesabın silinməsi qəbul edildi.",
     });
   } catch (err) {
-    console.error("deleteAccount error:", err);
+    logger.error("deleteAccount error:", err);
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };
@@ -622,17 +602,12 @@ export const blockUser = async (req, res) => {
       user.blockedUsers.push(targetId);
       await user.save();
 
-      // Notify admin
-      const { sendAdminNotification } = await import("../utils/email.js");
-      sendAdminNotification(
-        "İstifadəçi bloklandı", 
-        `İstifadəçi ${user.email} (${user._id}) digər istifadəçini blokladı: ${targetUser.email} (${targetUser._id})`
-      );
+      await AuditEvent.create({ actorId: user._id, targetId: targetUser._id, action: "user_block" });
     }
 
     return res.json({ success: true, message: "İstifadəçi bloklandı." });
   } catch (err) {
-    console.error("blockUser error:", err);
+    logger.error("blockUser error:", err);
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };
@@ -648,7 +623,7 @@ export const unblockUser = async (req, res) => {
 
     return res.json({ success: true, message: "İstifadəçinin bloku açıldı." });
   } catch (err) {
-    console.error("unblockUser error:", err);
+    logger.error("unblockUser error:", err);
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };
@@ -664,7 +639,7 @@ export const getBlockedUsers = async (req, res) => {
 
     return res.json({ success: true, blockedUsers: user.blockedUsers });
   } catch (err) {
-    console.error("getBlockedUsers error:", err);
+    logger.error("getBlockedUsers error:", err);
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };
@@ -674,7 +649,7 @@ export const reportContent = async (req, res) => {
     const reporterId = req.user._id;
     const { reportedUserId, videoId, reason, details } = req.body;
 
-    if (!reason) {
+    if (!z.object({ reason: z.string().trim().min(1).max(200), details: z.string().max(5000).optional(), reportedUserId: z.string().regex(/^[a-f\d]{24}$/i).optional(), videoId: z.string().regex(/^[a-f\d]{24}$/i).optional() }).refine((value) => value.reportedUserId || value.videoId).safeParse(req.body).success) {
       return res.status(400).json({ message: "Şikayət səbəbi mütləqdir." });
     }
 
@@ -688,19 +663,9 @@ export const reportContent = async (req, res) => {
     });
     await report.save();
 
-    const user = await User.findById(reporterId);
-    
-    // Notify admin
-    const { sendAdminNotification } = await import("../utils/email.js");
-    const targetInfo = reportedUserId ? `İstifadəçi ID: ${reportedUserId}` : videoId ? `Video ID: ${videoId}` : "Bilinmir";
-    sendAdminNotification(
-      "Yeni Şikayət (Report)", 
-      `Şikayət edən: ${user.email} (${user._id})\n\nHədəf: ${targetInfo}\n\nSəbəb: ${reason}\n\nƏlavə məlumat: ${details || "yoxdur"}`
-    );
-
     return res.json({ success: true, message: "Şikayətiniz qəbul edildi. Təşəkkür edirik." });
   } catch (err) {
-    console.error("reportContent error:", err);
+    logger.error("reportContent error:", err);
     return res.status(500).json({ message: "Server xətası baş verdi." });
   }
 };

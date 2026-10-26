@@ -9,9 +9,10 @@ import {
   verifyForgotOtp,
   resetPassword,
 } from "../controllers/auth.controller.js";
-import { authLimiter } from "../middlewares/rateLimit.middleware.js";
+import { authLimiter, authIpLimiter } from "../middlewares/rateLimit.middleware.js";
 
 const router = Router();
+router.use(authIpLimiter);
 
 // register + auto otp (Rate Limit ilə qorunur)
 router.post("/register/user", authLimiter, registerUser);

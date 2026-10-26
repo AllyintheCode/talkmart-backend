@@ -1,8 +1,20 @@
+import { logger } from "../utils/logger.js";
 import Onboarding from "../models/Onboarding.js";
 import Category from "../models/Category.js";
 import User from "../models/User.js";
 import Video from "../models/Video.js";
-import path from "path";
+import WorkerStatus from "../models/WorkerStatus.js";
+import Report from "../models/Report.js";
+import AuditEvent from "../models/AuditEvent.js";
+import { parsePagination, cursorFilter, nextCursor } from "../utils/pagination.js";
+import { deleteUserCompletely } from "../services/accountCleanup.service.js";
+import { deleteVideoCompletely } from "../services/videoCleanup.service.js";
+import { setAdminDecision, canPublishVideo, invalidateVideoCache } from "../services/videoState.service.js";
+import { invalidateUserSession } from "../middlewares/auth.middleware.js";
+import { getQueueStats } from "../services/videoProcessing.service.js";
+import { getMetrics } from "../utils/metrics.js";
+import { bumpContentVersion } from "../services/publicContent.service.js";
+
 import { uploadToR2, deleteFromR2 } from "../services/r2Upload.service.js";
 import { compressImage } from "../services/compress.service.js";
 
@@ -82,7 +94,7 @@ export const getDashboardStats = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("getDashboardStats error:", err);
+    logger.error("getDashboardStats error:", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
   }
 };
@@ -97,7 +109,7 @@ export const getAllCategories = async (req, res) => {
     const categories = await Category.find().sort({ createdAt: -1 });
     return res.status(200).json({ success: true, categories });
   } catch (err) {
-    console.error("getAllCategories error:", err);
+    logger.error("getAllCategories error:", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
   }
 };
@@ -121,9 +133,10 @@ export const createCategory = async (req, res) => {
       status: status || "active" 
     });
 
+    await bumpContentVersion("categories");
     return res.status(201).json({ success: true, message: "Kateqoriya yaradıldı", category });
   } catch (err) {
-    console.error("createCategory error:", err);
+    logger.error("createCategory error:", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
   }
 };
@@ -153,10 +166,11 @@ export const updateCategory = async (req, res) => {
     }
 
     await category.save();
+    await bumpContentVersion("categories");
 
     return res.status(200).json({ success: true, message: "Kateqoriya yeniləndi", category });
   } catch (err) {
-    console.error("updateCategory error:", err);
+    logger.error("updateCategory error:", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
   }
 };
@@ -172,10 +186,11 @@ export const deleteCategory = async (req, res) => {
     }
 
     await category.deleteOne();
+    await bumpContentVersion("categories");
 
     return res.status(200).json({ success: true, message: "Kateqoriya silindi." });
   } catch (err) {
-    console.error("deleteCategory error:", err);
+    logger.error("deleteCategory error:", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
   }
 };
@@ -203,7 +218,7 @@ export const createOnboarding = async (req, res) => {
     const compressed = await compressImage(req.file.buffer);
     const compressedSize = compressed.buffer.length;
     const savedPercent = ((1 - compressedSize / originalSize) * 100).toFixed(1);
-    console.log(`🖼️ Onboarding şəkil sıxışdırma: ${(originalSize / 1024).toFixed(2)}KB → ${(compressedSize / 1024).toFixed(2)}KB (${savedPercent}% azalma)`);
+    logger.log(`🖼️ Onboarding şəkil sıxışdırma: ${(originalSize / 1024).toFixed(2)}KB → ${(compressedSize / 1024).toFixed(2)}KB (${savedPercent}% azalma)`);
 
     const { key, url } = await uploadToR2(compressed.buffer, "talkmart/onboarding", compressed.mimetype, compressed.ext);
 
@@ -215,9 +230,10 @@ export const createOnboarding = async (req, res) => {
       publicId: key,    // R2 key (silmək üçün)
     });
 
+    await bumpContentVersion("onboarding");
     return res.status(201).json({ success: true, message: "Onboarding ekranı yaradıldı.", screen: newScreen });
   } catch (err) {
-    console.error("createOnboarding error:", err);
+    logger.error("createOnboarding error:", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
   }
 };
@@ -243,7 +259,7 @@ export const updateOnboarding = async (req, res) => {
       const compressed = await compressImage(req.file.buffer);
       const compressedSize = compressed.buffer.length;
       const savedPercent = ((1 - compressedSize / originalSize) * 100).toFixed(1);
-      console.log(`🖼️ Onboarding şəkil sıxışdırma: ${(originalSize / 1024).toFixed(2)}KB → ${(compressedSize / 1024).toFixed(2)}KB (${savedPercent}% azalma)`);
+      logger.log(`🖼️ Onboarding şəkil sıxışdırma: ${(originalSize / 1024).toFixed(2)}KB → ${(compressedSize / 1024).toFixed(2)}KB (${savedPercent}% azalma)`);
 
       const { key, url } = await uploadToR2(compressed.buffer, "talkmart/onboarding", compressed.mimetype, compressed.ext);
       screen.image = url;
@@ -255,10 +271,11 @@ export const updateOnboarding = async (req, res) => {
     if (order !== undefined) screen.order = parseInt(order);
 
     await screen.save();
+    await bumpContentVersion("onboarding");
 
     return res.status(200).json({ success: true, message: "Onboarding ekranı yeniləndi.", screen });
   } catch (err) {
-    console.error("updateOnboarding error:", err);
+    logger.error("updateOnboarding error:", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
   }
 };
@@ -278,10 +295,11 @@ export const deleteOnboarding = async (req, res) => {
 
     // Bazadan silirik
     await screen.deleteOne();
+    await bumpContentVersion("onboarding");
 
     return res.status(200).json({ success: true, message: "Onboarding ekranı silindi." });
   } catch (err) {
-    console.error("deleteOnboarding error:", err);
+    logger.error("deleteOnboarding error:", err);
     return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
   }
 };
@@ -291,349 +309,135 @@ export const deleteOnboarding = async (req, res) => {
 // ============================
 
 // GET /api/admin/users (Yalnız Admin)
-// Bütün istifadəçiləri limitsiz və filtersiz gətirir (Admin paneldəki modal üçün)
+// Məhdud səhifələmə və cursor ilə istifadəçiləri gətirir
 export const getAllUsers = async (req, res) => {
-  try {
-    const users = await User.find()
-      .select("-password -__v")
-      .sort({ createdAt: -1 })
-      .lean();
-
-    return res.status(200).json({
-      success: true,
-      count: users.length,
-      users,
-    });
-  } catch (err) {
-    console.error("getAllUsers error:", err);
-    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
-  }
+  const { page, limit, skip, search } = parsePagination(req.query);
+  const filter = { accountStatus: { $ne: "deleting" } };
+  if (req.query.role) filter.role = req.query.role;
+  if (req.query.verified !== undefined) filter["providerProfile.verified"] = req.query.verified === "true";
+  if (search) filter.fullName = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  const [users, total] = await Promise.all([
+    User.find({ $and: [filter, cursorFilter(req.query.cursor)] }).select("fullName role profileImage emailVerified isBlocked accountStatus providerProfile.verified createdAt")
+      .sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limit).maxTimeMS(5000).lean(),
+    User.countDocuments(filter).maxTimeMS(5000),
+  ]);
+  return res.json({ success: true, users, count: users.length, total, page, totalPages: Math.ceil(total / limit), nextCursor: nextCursor(users, limit) });
 };
-
-// ============================================================
-// PATCH /api/admin/users/:id/block — İstifadəçini blokla
-// ============================================================
 export const blockUser = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user = await User.findById(id);
-
-    if (!user) {
-      return res.status(404).json({ error: "NOT_FOUND", message: "İstifadəçi tapılmadı." });
-    }
-
-    // Admini bloklamaq olmaz
-    if (user.role === "admin") {
-      return res.status(403).json({ error: "FORBIDDEN", message: "Admin hesabını bloklamaq mümkün deyil." });
-    }
-
-    if (user.isBlocked) {
-      return res.status(409).json({ error: "ALREADY_BLOCKED", message: "İstifadəçi artıq bloklanıb." });
-    }
-
-    user.isBlocked = true;
-    await user.save();
-
-    return res.status(200).json({
-      success: true,
-      message: `${user.fullName} uğurla bloklandı.`,
-    });
-  } catch (err) {
-    console.error("blockUser error:", err);
-    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
-  }
+  const user = await User.findOneAndUpdate({ _id: req.params.id, role: { $ne: "admin" }, isBlocked: false },
+    { $set: { isBlocked: true }, $inc: { sessionVersion: 1 } }, { returnDocument: "after" });
+  if (!user) return res.status(404).json({ error: "NOT_FOUND", message: "Account unavailable" });
+  await invalidateUserSession(user._id);
+  await invalidateVideoCache();
+  await AuditEvent.create({ actorId: req.user._id, targetId: user._id, action: "account_block", reason: req.body.reason || "" });
+  return res.json({ success: true, message: "Account blocked" });
 };
-
-// ============================================================
-// PATCH /api/admin/users/:id/unblock — İstifadəçinin blokunu aç
-// ============================================================
 export const unblockUser = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user = await User.findById(id);
-
-    if (!user) {
-      return res.status(404).json({ error: "NOT_FOUND", message: "İstifadəçi tapılmadı." });
-    }
-
-    if (!user.isBlocked) {
-      return res.status(409).json({ error: "NOT_BLOCKED", message: "İstifadəçi bloklanmayıb." });
-    }
-
-    user.isBlocked = false;
-    await user.save();
-
-    return res.status(200).json({
-      success: true,
-      message: `${user.fullName} uğurla blokdan çıxarıldı.`,
-    });
-  } catch (err) {
-    console.error("unblockUser error:", err);
-    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
-  }
+  const user = await User.findOneAndUpdate({ _id: req.params.id, isBlocked: true, accountStatus: { $ne: "deleting" } },
+    { $set: { isBlocked: false }, $inc: { sessionVersion: 1 } }, { returnDocument: "after" });
+  if (!user) return res.status(404).json({ error: "NOT_FOUND" });
+  await invalidateUserSession(user._id);
+  await invalidateVideoCache();
+  await AuditEvent.create({ actorId: req.user._id, targetId: user._id, action: "account_unblock", reason: req.body.reason || "" });
+  return res.json({ success: true, message: "Account unblocked" });
 };
-
-// ============================================================
-// DELETE /api/admin/users/:id — İstifadəçini sil
-// ============================================================
+export const verifyProvider = async (req, res) => {
+  if (typeof req.body.verified !== "boolean") return res.status(400).json({ error: "INVALID_VERIFIED" });
+  const user = await User.findOneAndUpdate({ _id: req.params.id, role: "provider", accountStatus: { $ne: "deleting" } },
+    { $set: { "providerProfile.verified": req.body.verified }, $inc: { sessionVersion: 1 } }, { returnDocument: "after", runValidators: true });
+  if (!user) return res.status(404).json({ error: "NOT_FOUND" });
+  await invalidateUserSession(user._id);
+  await AuditEvent.create({ actorId: req.user._id, targetId: user._id, action: req.body.verified ? "provider_verify" : "provider_unverify", reason: req.body.reason || "" });
+  return res.json({ success: true, verified: user.providerProfile.verified });
+};
 export const deleteUser = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user = await User.findById(id);
-
-    if (!user) {
-      return res.status(404).json({ error: "NOT_FOUND", message: "İstifadəçi tapılmadı." });
-    }
-
-    // Admini silmək olmaz
-    if (user.role === "admin") {
-      return res.status(403).json({ error: "FORBIDDEN", message: "Admin hesabını silmək mümkün deyil." });
-    }
-
-    // Əgər R2-də profil şəkli varsa, onu da sil
-    if (user.profileImagePublicId) {
-      try {
-        await deleteFromR2(user.profileImagePublicId);
-      } catch (r2Err) {
-        console.warn("R2 profil şəkli silinərkən xəta:", r2Err.message);
-      }
-    }
-
-    await user.deleteOne();
-
-    return res.status(200).json({
-      success: true,
-      message: `${user.fullName} hesabı uğurla silindi.`,
-    });
-  } catch (err) {
-    console.error("deleteUser error:", err);
-    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
-  }
+  const user = await User.findById(req.params.id);
+  if (!user) return res.status(404).json({ error: "NOT_FOUND" });
+  if (user.role === "admin") return res.status(403).json({ error: "FORBIDDEN" });
+  await deleteUserCompletely(user._id);
+  return res.status(202).json({ success: true, message: "Account deletion queued" });
 };
-
-// ============================
-// VİDEO MODERASİYASI (ADMIN)
-// ============================
-
-// GET /api/admin/videos/moderation
-// Review və ya pending statusunda olan videoları gətir
-export const getVideosForReview = async (req, res) => {
-  try {
-    const videos = await Video.find({ moderationStatus: { $in: ["review", "pending"] } })
-      .populate("providerId", "fullName email")
-      .populate("categoryId", "name")
-      .sort({ createdAt: -1 });
-
-    return res.status(200).json({
-      success: true,
-      count: videos.length,
-      videos,
-    });
-  } catch (err) {
-    console.error("getVideosForReview error:", err);
-    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
-  }
-};
-
-// ============================
-// VİDEO İDARƏETMƏSİ (ADMIN) — Tam siyahı, silmə, status dəyişmə
-// ============================
-
-// GET /api/admin/videos
-// Bütün videoları gətir — filter (status, moderationStatus, search), pagination
-export const getAllVideos = async (req, res) => {
-  try {
-    const page   = parseInt(req.query.page)  || 1;
-    const limit  = parseInt(req.query.limit) || 20;
-    const skip   = (page - 1) * limit;
-
-    const { status, moderationStatus, processingStatus, search } = req.query;
-
-    const filter = {};
-    if (status)            filter.status            = status;
-    if (moderationStatus)  filter.moderationStatus  = moderationStatus;
-    if (processingStatus)  filter.processingStatus  = processingStatus;
-
-    if (search) {
-      const safe  = String(search).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const regex = new RegExp(safe, "i");
-      filter.$or  = [{ title: regex }, { description: regex }];
-    }
-
-    const [videos, total] = await Promise.all([
-      Video.find(filter)
-        .populate("providerId", "fullName email phone")
-        .populate("categoryId", "name")
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      Video.countDocuments(filter),
-    ]);
-
-    return res.status(200).json({
-      success: true,
-      total,
-      page,
-      totalPages: Math.ceil(total / limit),
-      count: videos.length,
-      videos,
-    });
-  } catch (err) {
-    console.error("getAllVideos error:", err);
-    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
-  }
-};
-
-// DELETE /api/admin/videos/:id
-// İstənilən videonu admin tərəfindən sil (R2 + thumbnail + DB)
+async function listVideos(req, res, reviewOnly = false) {
+  const { page, limit, skip, search } = parsePagination(req.query);
+  const filter = reviewOnly ? { moderationStatus: "review", status: { $ne: "deleting" } } : {};
+  for (const field of ["status", "moderationStatus", "processingStatus"]) if (req.query[field]) filter[field] = req.query[field];
+  if (search) filter.$text = { $search: search };
+  const [videos, total] = await Promise.all([
+    Video.find({ $and: [filter, cursorFilter(req.query.cursor)] }).populate("providerId", "fullName").populate("categoryId", "name")
+      .sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limit).maxTimeMS(5000).lean(),
+    Video.countDocuments(filter).maxTimeMS(5000),
+  ]);
+  return res.json({ success: true, videos, total, page, count: videos.length, totalPages: Math.ceil(total / limit), nextCursor: nextCursor(videos, limit) });
+}
+export const getVideosForReview = (req, res) => listVideos(req, res, true);
+export const getAllVideos = (req, res) => listVideos(req, res);
 export const adminDeleteVideo = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const video = await Video.findById(id);
-
-    if (!video) {
-      return res.status(404).json({ error: "NOT_FOUND", message: "Video tapılmadı." });
-    }
-
-    // R2-dən video faylını sil
-    if (video.publicId) {
-      try {
-        await deleteFromR2(video.publicId);
-      } catch (r2Err) {
-        console.warn("R2 video silinərkən xəta:", r2Err.message);
-      }
-    }
-
-    // R2-dən thumbnail-i sil
-    if (video.thumbnail) {
-      try {
-        const thumbUrl = new URL(video.thumbnail);
-        const thumbKey = thumbUrl.pathname.replace(/^\//, "");
-        await deleteFromR2(thumbKey);
-      } catch (thumbErr) {
-        console.warn("R2 thumbnail silinərkən xəta:", thumbErr.message);
-      }
-    }
-
-    await video.deleteOne();
-
-    return res.status(200).json({
-      success: true,
-      message: "Video uğurla silindi.",
-      deletedVideoId: id,
-    });
-  } catch (err) {
-    console.error("adminDeleteVideo error:", err);
-    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
-  }
+  const video = await deleteVideoCompletely(req.params.id);
+  if (!video) return res.status(404).json({ error: "NOT_FOUND" });
+  await AuditEvent.create({ actorId: req.user._id, targetId: video._id, action: "video_delete" });
+  return res.status(202).json({ success: true, deletedVideoId: video._id });
 };
-
-// PATCH /api/admin/videos/:id/status
-// Videonun status-unu dəyiş: active ↔ inactive
 export const adminUpdateVideoStatus = async (req, res) => {
-  try {
-    const { id }     = req.params;
-    const { status } = req.body;
-
-    const allowed = ["active", "inactive"];
-    if (!status || !allowed.includes(status)) {
-      return res.status(400).json({
-        error: "INVALID_STATUS",
-        message: "Status yalnız 'active' və ya 'inactive' ola bilər.",
-      });
-    }
-
-    const video = await Video.findById(id);
-    if (!video) {
-      return res.status(404).json({ error: "NOT_FOUND", message: "Video tapılmadı." });
-    }
-
-    video.status = status;
-    await video.save();
-
-    return res.status(200).json({
-      success: true,
-      message: `Video statusu '${status}' olaraq yeniləndi.`,
-      video: {
-        _id:    video._id,
-        status: video.status,
-        moderationStatus: video.moderationStatus,
-      },
-    });
-  } catch (err) {
-    console.error("adminUpdateVideoStatus error:", err);
-    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
+  if (!["active", "inactive"].includes(req.body.status)) return res.status(400).json({ error: "INVALID_STATUS" });
+  const video = await Video.findOne({ _id: req.params.id, status: { $ne: "deleting" } });
+  if (!video) return res.status(404).json({ error: "NOT_FOUND" });
+  const owner = await User.findById(video.providerId);
+  const wantsActive = req.body.status === "active";
+  if (wantsActive && !canPublishVideo({ ...video.toObject(), visibility: "public" }, owner)) {
+    return res.status(409).json({ error: "VIDEO_NOT_PUBLISHABLE", message: "Video must be ready and approved" });
   }
+  const updated = await Video.findOneAndUpdate({ _id: video._id, decisionVersion: video.decisionVersion, status: { $ne: "deleting" }, processingStatus: video.processingStatus },
+    { $set: { status: req.body.status, visibility: wantsActive ? "public" : "hidden" }, $inc: { decisionVersion: 1 } }, { returnDocument: "after", runValidators: true });
+  if (!updated) return res.status(409).json({ error: "STATE_CHANGED" });
+  await invalidateVideoCache();
+  await AuditEvent.create({ actorId: req.user._id, targetId: video._id, action: `video_${req.body.status}` });
+  return res.json({ success: true, video: updated });
 };
-
-// PATCH /api/admin/videos/:id/moderate
-// Videonu manual təsdiqlə və ya rədd et
 export const moderateVideo = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { action, feedback } = req.body; // action: "approve" or "reject"
-
-    const video = await Video.findById(id);
-    if (!video) {
-      return res.status(404).json({ error: "NOT_FOUND", message: "Video tapılmadı." });
-    }
-
-    if (action === "approve") {
-      video.moderationStatus = "approved";
-      video.adminFeedback = feedback || "Admin tərəfindən təsdiqləndi.";
-      // Yalnız FFMPEG emalı tamamlanıbsa aktiv et.
-      // Əgər hələ işlənməyibsə (queued), processVideoJob bitdikdə
-      // moderationStatus="approved" görüb özü status="active" edəcək.
-      if (video.processingStatus === "ready") {
-        video.status = "active";
-      }
-      await video.save();
-
-      return res.status(200).json({
-        success: true,
-        message: "Video uğurla təsdiqləndi.",
-        video,
-      });
-
-    } else if (action === "reject") {
-      // ❌ Rədd edildi → Video DB-dən və R2-dən tamamilə silinir, providerin profilindən qaldırılır
-
-      // R2-dən video faylını sil
-      if (video.publicId) {
-        try {
-          await deleteFromR2(video.publicId);
-        } catch (r2Err) {
-          console.warn("R2 video silinərkən xəta (reject):", r2Err.message);
-        }
-      }
-
-      // R2-dən thumbnail-i sil
-      if (video.thumbnail) {
-        try {
-          const thumbUrl = new URL(video.thumbnail);
-          const thumbKey = thumbUrl.pathname.replace(/^\//, "");
-          await deleteFromR2(thumbKey);
-        } catch (thumbErr) {
-          console.warn("R2 thumbnail silinərkən xəta (reject):", thumbErr.message);
-        }
-      }
-
-      // DB-dən tamamilə sil
-      await video.deleteOne();
-
-      return res.status(200).json({
-        success: true,
-        message: "Video rədd edildi və profildən silindi.",
-        deletedVideoId: id,
-      });
-
-    } else {
-      return res.status(400).json({ error: "INVALID_ACTION", message: "Yalnız 'approve' və ya 'reject' ola bilər." });
-    }
-
-  } catch (err) {
-    console.error("moderateVideo error:", err);
-    return res.status(500).json({ error: "SERVER_ERROR", message: "Server xətası." });
-  }
+  if (req.body.feedback !== undefined && (typeof req.body.feedback !== "string" || req.body.feedback.length > 2000)) return res.status(400).json({ error: "INVALID_FEEDBACK" });
+  const video = await setAdminDecision(req.params.id, req.body.action, req.user._id, req.body.feedback || "");
+  if (!video) return res.status(404).json({ error: "NOT_FOUND" });
+  return res.json({ success: true, video });
+};
+export const getReports = async (req, res) => {
+  const { page, limit, skip } = parsePagination(req.query);
+  const filter = {};
+  if (req.query.status) filter.status = req.query.status;
+  if (req.query.overdue === "true") { filter.status = { $in: ["new", "in_progress"] }; filter.createdAt = { $lt: new Date(Date.now() - 86400000) }; }
+  const [reports, total] = await Promise.all([Report.find({ $and: [filter, cursorFilter(req.query.cursor)] }).sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limit).maxTimeMS(5000).lean(), Report.countDocuments(filter).maxTimeMS(5000)]);
+  return res.json({ success: true, reports, total, page, totalPages: Math.ceil(total / limit), nextCursor: nextCursor(reports, limit) });
+};
+export const updateReport = async (req, res) => {
+  const { status, note = "", assignedTo } = req.body;
+  if (!["new", "in_progress", "resolved", "rejected"].includes(status) || typeof note !== "string" || note.length > 2000 || (["resolved", "rejected"].includes(status) && !note.trim())) return res.status(400).json({ error: "INVALID_REPORT_DECISION" });
+  if (assignedTo && !await User.exists({ _id: assignedTo, role: "admin", isBlocked: false })) return res.status(400).json({ error: "INVALID_ASSIGNEE" });
+  const closed = ["resolved", "rejected"].includes(status);
+  const report = await Report.findByIdAndUpdate(req.params.id, {
+    $set: { status, adminNote: note, assignedTo: assignedTo || req.user._id, resolvedBy: closed ? req.user._id : null, resolvedAt: closed ? new Date() : null },
+    $push: { history: { action: status, adminId: req.user._id, note, at: new Date() } },
+  }, { returnDocument: "after", runValidators: true });
+  if (!report) return res.status(404).json({ error: "NOT_FOUND" });
+  return res.json({ success: true, report });
+};
+export const getOperations = async (req, res) => {
+  const [queue, reportBacklog, notificationFailures, staleLeases, deleting] = await Promise.all([
+    getQueueStats(), Report.countDocuments({ status: { $in: ["new", "in_progress"] } }),
+    Report.countDocuments({ notificationStatus: "failed" }),
+    Video.countDocuments({ processingStatus: "processing", lockedUntil: { $lt: new Date() } }),
+    Video.countDocuments({ status: "deleting" }),
+  ]);
+  const workers = await WorkerStatus.find().lean();
+  return res.json({ success: true, workers, queue, reportBacklog, notificationFailures, staleLeases, deleting, latency: getMetrics(), memory: process.memoryUsage() });
+};
+export const retryVideo = async (req, res) => {
+  const video = await Video.findOneAndUpdate({ _id: req.params.id, processingStatus: "failed", stagingKey: { $ne: "" }, status: { $ne: "deleting" } },
+    { $set: { processingStatus: "queued", attempt: 0, nextAttemptAt: new Date(), workerId: null, lockedUntil: null } }, { returnDocument: "after" });
+  if (!video) return res.status(409).json({ error: "NOT_RETRYABLE" });
+  await AuditEvent.create({ actorId: req.user._id, targetId: video._id, action: "video_retry" });
+  return res.status(202).json({ success: true, video });
+};
+export const retryReportNotification = async (req, res) => {
+  const report = await Report.findOneAndUpdate({ _id: req.params.id, notificationStatus: "failed" }, { $set: { notificationStatus: "pending", notificationAttempts: 0, notificationNextAt: new Date() } }, { returnDocument: "after" });
+  if (!report) return res.status(409).json({ error: "NOT_RETRYABLE" });
+  return res.status(202).json({ success: true, report });
 };

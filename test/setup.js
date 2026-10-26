@@ -1,0 +1,13 @@
+import crypto from "node:crypto";
+process.env.NODE_ENV = "test";
+process.env.REDIS_DISABLED = "true";
+process.env.JWT_SECRET = crypto.randomBytes(32).toString("hex");
+process.env.OTP_PEPPER = crypto.randomBytes(32).toString("hex");
+process.env.R2_ENDPOINT = "https://storage.invalid";
+process.env.R2_BUCKET = "test-public";
+process.env.R2_STAGING_BUCKET = "test-private";
+process.env.R2_PUBLIC_URL = "https://media.invalid";
+process.env.R2_ACCESS_KEY_ID = "test-access";
+process.env.R2_SECRET_ACCESS_KEY = "test-secret";
+process.env.GEMINI_API_KEY = "";
+process.env.GEMINI_API_KEYS = "";

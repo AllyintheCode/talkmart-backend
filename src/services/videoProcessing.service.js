@@ -1,137 +1,132 @@
-import PQueue from "p-queue";
-import fs from "fs";
+import fs from "node:fs/promises";
+import path from "node:path";
+import os from "node:os";
+import crypto from "node:crypto";
 import Video from "../models/Video.js";
 import { compressVideo, generateThumbnail } from "./compress.service.js";
-import { uploadToR2 } from "./r2Upload.service.js";
+import { uploadFileToR2, uploadToR2, downloadFromR2, deleteFromR2 } from "./r2Upload.service.js";
 import { validateVideoContentAI } from "./aiModeration.service.js";
-import { delCachePattern } from "../config/redis.js";
+import { validateUploadedVideo } from "./mediaProbe.service.js";
+import { publishIfEligible } from "./videoState.service.js";
+import { logger } from "../utils/logger.js";
+import { observe } from "../utils/metrics.js";
 
-// ============================================================
-// FFMPEG sıxışdırma + R2 yüklə + AI Analiz queue
-// Concurrency 3 — Sürətləndirilmiş preset sayəsində daha çox paralel emal
-// ============================================================
-const processingQueue = new PQueue({ concurrency: 3 });
+export { canPublishVideo } from "./videoState.service.js";
+export const LEASE_MS = 300000;
+export const MAX_ATTEMPTS = 3;
 
-/**
- * Paralel və Sürətləndirilmiş Video Emalı Pipeline
- * 1. AI analizi cəmi 2-4 saniyədə bitir (Keyframe + Flash-Lite)
- * 2. Rədd edilərsə, dərhal yekunlaşır (vaxt və resurs itkisi olmur)
- * 3. Təsdiq edilərsə, FFMPEG fast preset və paralel R2 yükləmə icra olunur
- */
-const processVideoJob = async ({ videoId, tempFilePath, originalExt, categoryName, duration }) => {
-  console.log(`⚙️ Video emalı başladı: ${videoId}`);
+// The video document is the durable queue. No destructive Redis pop or API fallback.
+export async function acquireLease(videoId) {
+  const now = new Date();
+  return Video.findOneAndUpdate({
+    ...(videoId ? { _id: videoId } : {}), status: { $ne: "deleting" },
+    stagingKey: { $ne: "" }, attempt: { $lt: MAX_ATTEMPTS },
+    $or: [
+      { processingStatus: "queued", nextAttemptAt: { $lte: now } },
+      { processingStatus: "processing", lockedUntil: { $lte: now } },
+    ],
+  }, { $set: {
+    processingStatus: "processing", workerId: crypto.randomUUID(),
+    lockedUntil: new Date(Date.now() + LEASE_MS), lastHeartbeatAt: now,
+  }, $inc: { attempt: 1 } }, { sort: { createdAt: 1 }, returnDocument: "after", runValidators: true });
+}
+const leaseFilter = (job) => ({ _id: job._id, workerId: job.workerId, processingStatus: "processing", status: { $ne: "deleting" }, lockedUntil: { $gt: new Date() } });
 
+export async function applyAiResult(job, ai, media) {
+  // Commit media and the AI decision together, so a crash cannot leave ready/pending.
+  const mediaFields = {
+    ...media, processingStatus: "ready", completedAt: new Date(), workerId: null, lockedUntil: null,
+  };
+  const aiWrite = await Video.updateOne({
+    ...leaseFilter(job), decisionVersion: job.decisionVersion,
+    moderationSource: { $ne: "admin" },
+  }, { $set: {
+    ...mediaFields,
+    moderationStatus: ai.finalStatus, moderationSource: "ai",
+    aiFeedback: ai.aiData?.reasoning || "", aiConfidence: ai.aiData?.confidenceScore || 0,
+  } }, { runValidators: true });
+  if (!aiWrite.matchedCount) {
+    // An admin override keeps its decision while this lease can still finish media.
+    const mediaWrite = await Video.updateOne({ ...leaseFilter(job), $or: [
+      { moderationSource: "admin" }, { decisionVersion: { $ne: job.decisionVersion } },
+    ] }, { $set: mediaFields }, { runValidators: true });
+    if (!mediaWrite.matchedCount) return false;
+  }
+  // Maintenance reconciles publication if the process exits after the commit.
+  try { await publishIfEligible(job._id); } catch (err) { logger.warn("publication_retry", err); }
+  return true;
+}
+
+export async function processVideoJob(job) {
+  const started = Date.now();
+  observe("queue_wait_ms", Math.max(0, started - new Date(job.createdAt).getTime()));
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "talkmart-job-"));
+  const input = path.join(directory, `input${job.originalExt}`);
+  let compressed;
+  let retained = false;
+  const videoKey = `talkmart/videos/${job._id}/${job.workerId}.mp4`;
+  const thumbKey = `talkmart/thumbnails/${job._id}/${job.workerId}.webp`;
+  const beat = setInterval(() => {
+    Video.updateOne(leaseFilter(job), { $set: { lockedUntil: new Date(Date.now() + LEASE_MS), lastHeartbeatAt: new Date() } })
+      .catch((err) => logger.error("video_heartbeat_failed", err));
+  }, 30000);
   try {
-    // 1. Statusu processing edirik
-    await Video.findByIdAndUpdate(videoId, { processingStatus: "processing" });
-
-    // Tapşırıq 1: Yüksək sürətli Gemini AI Moderasiyası
-    console.log(`🤖 AI analizi başladı: ${videoId}`);
-    const aiCheckResult = await validateVideoContentAI({ tempFilePath, categoryName, duration });
-
-    let videoUrl = "";
-    let publicId = "";
-    let thumbnail = "";
-
-    // Əgər video RƏDD EDİLMƏYİBSƏ, FFMPEG sıxışdırma və paralel R2 yükləməni icra et
-    if (aiCheckResult.finalStatus !== "rejected") {
-      console.log(`✅ AI icazə verdi (${aiCheckResult.finalStatus}). FFMPEG və paralel R2 yükləməsi başlayır...`);
-
-      // 1. Faylı diskdən birbaşa sürətli preset ilə sıxışdırırıq
-      const compressed = await compressVideo(tempFilePath, originalExt);
-
-      // 2. Video upload və Thumbnail yaratma + upload paralel aparılır
-      const [r2Video, r2Thumb] = await Promise.all([
-        uploadToR2(compressed.buffer, "talkmart/videos", compressed.mimetype, compressed.ext),
-        generateThumbnail(tempFilePath, originalExt)
-          .then((thumbData) => uploadToR2(thumbData.buffer, "talkmart/thumbnails", thumbData.mimetype, thumbData.ext))
-          .catch((e) => {
-            console.warn(`⚠️ Thumbnail xətası: ${e.message}`);
-            return { url: "" };
-          }),
-      ]);
-
-      videoUrl = r2Video.url;
-      publicId = r2Video.key;
-      thumbnail = r2Thumb.url;
-    } else {
-      console.log(`🚫 Video AI tərəfindən rədd edildi! R2 və Thumbnail mərhələləri ləğv olundu. [${videoId}]`);
+    // Record intended object names before writing storage, including crash recovery.
+    const registered = await Video.updateOne(leaseFilter(job), { $addToSet: { mediaKeys: { $each: [videoKey, thumbKey] } } });
+    if (!registered.matchedCount) return;
+    let t = Date.now();
+    await downloadFromR2(job.stagingKey, input);
+    observe("r2_download_ms", Date.now() - t);
+    await validateUploadedVideo(input);
+    t = Date.now();
+    const ai = await validateVideoContentAI({ tempFilePath: input, categoryName: job.categoryName, duration: job.duration });
+    observe("ai_ms", Date.now() - t);
+    // Retain media for manual review and admin overrides, including AI rejection.
+    t = Date.now();
+    compressed = await compressVideo(input, job.originalExt);
+    observe("ffmpeg_ms", Date.now() - t);
+    if (!await Video.exists(leaseFilter(job))) return;
+    t = Date.now();
+    const video = await uploadFileToR2(compressed.outputPath, "talkmart/videos", "video/mp4", ".mp4", videoKey);
+    const thumb = await generateThumbnail(input, job.originalExt);
+    const thumbnail = await uploadToR2(thumb.buffer, "talkmart/thumbnails", thumb.mimetype, thumb.ext, thumbKey);
+    observe("r2_upload_ms", Date.now() - t);
+    retained = await applyAiResult(job, ai, { videoUrl: video.url, publicId: video.key, thumbnail: thumbnail.url, thumbnailPublicId: thumbnail.key });
+    if (retained) {
+      // On failure the reference remains, so maintenance retries staging deletion.
+      await deleteFromR2(job.stagingKey);
+      await Video.updateOne({ _id: job._id, stagingKey: job.stagingKey }, { $set: { stagingKey: "" } });
     }
-
-    // DB-ni yekunlaşdırıb yeniləyirik
-    const video = await Video.findById(videoId);
-    if (video) {
-      video.videoUrl = videoUrl;
-      video.publicId = publicId;
-      video.thumbnail = thumbnail;
-      video.processingStatus = "ready";
-      
-      video.moderationStatus = aiCheckResult.finalStatus;
-      video.aiFeedback = aiCheckResult.aiData?.reasoning || "";
-      video.aiConfidence = aiCheckResult.aiData?.confidenceScore || 0;
-
-      if (aiCheckResult.finalStatus === "approved") {
-        video.status = "active"; // İcazə verildi, Feed-ə çıxır
-      } else {
-        video.status = "inactive"; // Rədd edildi və ya manual baxış lazımdır
-      }
-
-      await video.save();
-      if (video.status === "active") {
-        await delCachePattern("feed:*");
-        await delCachePattern("categories:top:*");
-      }
-      console.log(`✅ Video tam emal edildi və təsdiqləndi: ${videoId} | Status: ${aiCheckResult.finalStatus}`);
-    }
-
   } catch (err) {
-    console.error(`❌ Video emalı xətası [${videoId}]:`, err.message);
-    await Video.findByIdAndUpdate(videoId, {
-      processingStatus: "failed",
-      moderationStatus: "review",
-      aiFeedback: "Sistemdə xəta baş verdi, emal yarımçıq qaldı.",
-    }).catch(() => {});
+    logger.error("video_job_failed", { videoId: job._id, attempt: job.attempt }, err);
+    await Video.updateOne(leaseFilter(job), { $set: {
+      processingStatus: job.attempt >= MAX_ATTEMPTS ? "failed" : "queued",
+      workerId: null, lockedUntil: null, nextAttemptAt: new Date(Date.now() + 10000 * 2 ** job.attempt),
+    } }, { runValidators: true });
   } finally {
-    // Hər şey bitdikdən sonra temp faylı silirik
-    try {
-      if (fs.existsSync(tempFilePath)) fs.unlinkSync(tempFilePath);
-    } catch (_) {}
-  }
-};
-
-export const enqueueVideoProcessing = ({ videoId, tempFilePath, originalExt, categoryName, duration }) => {
-  processingQueue
-    .add(() => processVideoJob({ videoId, tempFilePath, originalExt, categoryName, duration }))
-    .catch((err) => console.error("Processing queue xətası:", err));
-
-  console.log(`📋 Video növbəyə alındı: ${videoId} | Növbədə: ${processingQueue.size}`);
-};
-
-/**
- * Server qəfil sönərsə, yarımçıq qalmış videoları bərpa etmək (Crash Recovery)
- * Bu funksiya server başlayanda (index.js içində) çağırılacaq.
- */
-export const recoverStuckVideos = async () => {
-  try {
-    const stuckVideos = await Video.find({ processingStatus: { $in: ["queued", "processing"] } });
-    
-    if (stuckVideos.length > 0) {
-      console.log(`🧹 ${stuckVideos.length} ədəd yarımçıq emal olunan video tapıldı. "failed" statusuna keçirilir...`);
-      for (const v of stuckVideos) {
-        v.processingStatus = "failed";
-        v.moderationStatus = "review";
-        v.aiFeedback = "Server qəzası və ya restart səbəbindən emal yarımçıq qaldı.";
-        await v.save();
-      }
-      console.log("✅ Yarımçıq videolar bərpa edildi.");
+    clearInterval(beat);
+    compressed?.cleanup();
+    await fs.rm(directory, { recursive: true, force: true });
+    if (!retained) {
+      // A timed-out DB response may still have committed. Never delete its media.
+      try {
+        const referenced = await Video.exists({ _id: job._id, $or: [{ publicId: videoKey }, { thumbnailPublicId: thumbKey }] });
+        if (!referenced) await Promise.allSettled([deleteFromR2(videoKey), deleteFromR2(thumbKey)]);
+      } catch (err) { logger.warn("media_compensation_deferred", err); }
     }
-  } catch (err) {
-    console.error("Crash recovery xətası:", err);
+    observe("video_job_ms", Date.now() - started);
   }
-};
-
-export const getQueueStats = () => ({
-  queued: processingQueue.size,
-  running: processingQueue.pending,
-  concurrency: 3,
-});
+}
+export async function recoverStuckVideos() {
+  // Active leases are never touched. Exhausted expired jobs form the dead-letter list.
+  await Video.updateMany({ processingStatus: "processing", lockedUntil: { $lte: new Date() }, attempt: { $gte: MAX_ATTEMPTS }, status: { $ne: "deleting" } },
+    { $set: { processingStatus: "failed", workerId: null, lockedUntil: null } });
+}
+export async function getQueueStats() {
+  const [queued, running, failed] = await Promise.all([
+    Video.countDocuments({ processingStatus: "queued" }),
+    Video.countDocuments({ processingStatus: "processing" }),
+    Video.countDocuments({ processingStatus: "failed" }),
+  ]);
+  return { queued, running, failed };
+}

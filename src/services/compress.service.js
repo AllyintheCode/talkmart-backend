@@ -70,34 +70,48 @@ export const compressVideo = async (input, originalExt = ".mp4") => {
 
   try {
     await new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .videoCodec("libx264")       // H.264
+      const command = ffmpeg(inputPath)
+        .inputOptions(["-protocol_whitelist file,pipe"])
+        .videoCodec("libx264")
         .outputOptions([
-          "-crf 23",                  // Keyfiyyət: 23 idealdır
-          "-preset fast",             // Sürətli emal üçün optimallaşdırıldı (2-3x daha sürətli)
-          "-movflags +faststart",     // Web üçün progressive loading
-          "-pix_fmt yuv420p",         // Bütün player-lərlə uyğunluq
+          "-threads 2",
+          "-crf 23",
+          "-preset fast",
+          "-movflags +faststart",
+          "-pix_fmt yuv420p",
+          "-fs 200M",
         ])
-        .audioCodec("aac")           // AAC audio
-        .audioBitrate("128k")        // 128kbps keyfiyyətli audio
+        .audioCodec("aac")
+        .audioBitrate("128k")
         .format("mp4")
         .on("end", resolve)
         .on("error", reject)
         .save(outputPath);
+
+      const timer = setTimeout(() => {
+        try { command.kill("SIGKILL"); } catch (_) {}
+        reject(new Error("FFMPEG_TIMEOUT"));
+      }, 180000);
+      command.on("end", () => clearTimeout(timer));
+      command.on("error", () => clearTimeout(timer));
     });
 
-    const compressedBuffer = fs.readFileSync(outputPath);
-
+    if (fs.statSync(outputPath).size >= 200 * 1000 * 1000) throw new Error("VIDEO_OUTPUT_TOO_LARGE");
     return {
-      buffer: compressedBuffer,
+      outputPath,
       ext: ".mp4",
       mimetype: "video/mp4",
+      cleanup: () => {
+        try { fs.unlinkSync(outputPath); } catch (_) {}
+      },
     };
+  } catch (err) {
+    try { fs.unlinkSync(outputPath); } catch (_) {}
+    throw err;
   } finally {
     if (isTempInput) {
       try { fs.unlinkSync(inputPath); } catch (_) {}
     }
-    try { fs.unlinkSync(outputPath); } catch (_) {}
   }
 };
 
@@ -129,7 +143,7 @@ export const generateThumbnail = async (input, originalExt = ".mp4") => {
 
   try {
     await new Promise((resolve, reject) => {
-      ffmpeg()
+      const command = ffmpeg()
         .input(inputPath)
         .inputOptions(["-ss 00:00:00.500"]) // Fast input seek
         .outputOptions(["-vframes 1"])
@@ -137,6 +151,9 @@ export const generateThumbnail = async (input, originalExt = ".mp4") => {
         .on("end", resolve)
         .on("error", reject)
         .run();
+      const timer = setTimeout(() => { command.kill("SIGKILL"); reject(new Error("THUMBNAIL_TIMEOUT")); }, 10000);
+      command.on("end", () => clearTimeout(timer));
+      command.on("error", () => clearTimeout(timer));
     });
 
     const thumbnailBuffer = fs.readFileSync(outputPath);
