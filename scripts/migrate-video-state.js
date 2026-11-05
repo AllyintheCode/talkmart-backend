@@ -16,7 +16,8 @@ const migrationAt = new Date();
 let changed = 0;
 let conflicts = 0;
 let snapshot;
-await mongoose.connect(process.env.MONGO_URI);
+const proposed = { processingStatus: {}, moderationStatus: {}, status: {} };
+await mongoose.connect(process.env.MONGO_URI, { autoCreate: false, autoIndex: false });
 try {
   if (rollbackAt !== -1) {
     const filename = process.argv[rollbackAt + 1];
@@ -42,6 +43,10 @@ try {
       const category = await Category.findById(video.categoryId).lean();
       fields.categoryName = category?.name || fields.categoryName;
       fields.migrationAt = migrationAt;
+      for (const key of Object.keys(proposed)) {
+        const value = fields[key];
+        proposed[key][value] = (proposed[key][value] || 0) + 1;
+      }
       if (apply) {
         const previous = Object.fromEntries(Object.keys(fields).filter((key) => video[key] !== undefined).map((key) => [key, video[key]]));
         const missing = Object.keys(fields).filter((key) => video[key] === undefined);
@@ -59,6 +64,6 @@ try {
     }
   }
   if (apply) await AuditEvent.create({ action: rollbackAt !== -1 ? "migration_video_v2_rollback" : "migration_video_v2", reason: `Changed ${changed}; conflicts ${conflicts}` });
-  logger.info({ mode: apply ? "apply" : "dry-run", changed, conflicts, snapshot });
+  logger.info({ mode: apply ? "apply" : "dry-run", changed, conflicts, ...(rollbackAt === -1 ? { proposed } : {}), snapshot });
   if (conflicts) process.exitCode = 1;
 } finally { await mongoose.disconnect(); }

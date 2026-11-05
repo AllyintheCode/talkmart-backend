@@ -339,3 +339,36 @@ test("versioned migration dry-run, apply and rollback operate on the isolated te
   const restored = await Video.collection.findOne({ _id: id });
   assert.equal(restored.schemaVersion, undefined); assert.equal(restored.status, "active");
 });
+
+test("migration previews leave collections, indexes and legacy records unchanged", async () => {
+  const dbName = "talkmart_migration_readonly";
+  const db = mongoose.connection.getClient().db(dbName);
+  const exec = promisify(execFile);
+  const options = { env: { ...process.env, MONGO_URI: repl.getUri(dbName) }, windowsHide: true, timeout: 20000 };
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "talkmart-migration-preview-"));
+  const metadata = async () => {
+    const collections = (await db.listCollections({}, { nameOnly: true }).toArray()).map(item => item.name).sort();
+    return Promise.all(collections.map(async name => ({ name, indexes: (await db.collection(name).indexes()).sort((a, b) => a.name.localeCompare(b.name)) })));
+  };
+  try {
+    assert.deepEqual(await metadata(), []);
+    await exec(process.execPath, ["scripts/migrate-video-state.js"], options);
+    assert.deepEqual(await metadata(), [], "Preview must not create an empty collection or its indexes");
+    const id = new mongoose.Types.ObjectId();
+    const legacy = { _id: id, providerId: provider._id, categoryId: category._id, description: "legacy", price: 1, videoUrl: "media", status: "active" };
+    await db.collection("videos").insertOne(legacy);
+    await db.collection("videos").createIndex({ price: -1 }, { name: "existing_price_desc" });
+    const before = await metadata();
+    await exec(process.execPath, ["scripts/migrate-video-state.js"], options);
+    assert.deepEqual(await metadata(), before, "Preview must preserve existing indexes");
+    assert.deepEqual(await db.collection("videos").findOne({ _id: id }), legacy);
+    const snapshot = path.join(directory, "rollback.jsonl");
+    await fs.writeFile(snapshot, mongoose.mongo.BSON.EJSON.stringify({ id, migrationAt: new Date(), previous: { status: "active" }, missing: [] }) + "\n");
+    await exec(process.execPath, ["scripts/migrate-video-state.js", "--rollback", snapshot], options);
+    assert.deepEqual(await metadata(), before, "Rollback preview must preserve existing indexes");
+    assert.deepEqual(await db.collection("videos").findOne({ _id: id }), legacy);
+  } finally {
+    await db.dropDatabase();
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
