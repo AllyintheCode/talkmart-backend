@@ -94,7 +94,7 @@ export async function validateVideoContentAI({ tempFilePath, categoryName, durat
       try {
         const available = keys();
         const model = new GoogleGenerativeAI(available[keyIndex % available.length]).getGenerativeModel({
-          model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+          model: process.env.GEMINI_MODEL || "gemini-3.5-flash-lite",
           generationConfig: { responseMimeType: "application/json", responseSchema: schema },
         });
         const response = await model.generateContent([...images, { text:
