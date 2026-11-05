@@ -43,7 +43,7 @@ For an existing PM2 deployment, `ecosystem.config.cjs` defines `talkmart-api` an
 
 Missing Gemini configuration yields manual review. Set a model actually available to the account in `GEMINI_MODEL`. Keyframes do not assess audio or every instant; use `MANUAL_REVIEW_CATEGORIES` for categories requiring human review. The 20-second budget bounds the AI attempt path; it is not a promise that upload, compression and publication finish within 20 seconds.
 
-Keyframe extraction allows up to five seconds per frame within a shared 13.5-second budget, reserving time for the model request. Input decoding uses two threads and frame encoding/filtering uses one. This handles portrait 4K media without the former 1.5-second per-frame cutoff; expired budgets still require manual review and remove temporary frames. A real portrait 4K fixture and deadline/cleanup checks cover this path.
+Keyframe extraction shares a 13.5-second budget, reserving time for the model request. Clips up to 30 seconds use one decoder pass to sample four time windows, avoiding repeated decoding of the same 4K GOP. Longer clips retain sparse seeks with a five-second per-seek cap so a multi-minute upload does not require full decoding. Input decoding uses two threads and frame encoding/filtering uses one. Expired budgets or incomplete samples require manual review and remove temporary frames. Real portrait 4K, short/long sampling coverage and deadline/cleanup checks cover these paths.
 
 ## Client/API changes
 
@@ -74,7 +74,7 @@ All rollback and migration commands are prepared for an operator; none was run a
 
 `GET /api/admin/operations` returns queue/failed/stale-lease counts, deletion/report backlog, notification failures, per-worker heartbeat, bounded p50/p95/p99 latency samples and memory. Workers publish snapshots and redacted structured logs every maintenance cycle. Monitor missing/stale worker heartbeats, rising failure/cleanup/report backlogs, repeated 429s, and orphan-removal counts. Forward those logs/metrics to the deployment's monitoring system and configure alerts there.
 
-The supplied tests use a temporary local replica set, real FFprobe/FFmpeg, and fake R2/SMTP; they do not send email or call paid AI. Local verification passed 11 unit/media tests and 22 integration tests, including portrait 4K frame extraction, shared-deadline cleanup, legacy thumbnail retention and migration dry-run/apply/rollback on the isolated test DB. Dependency audit reported zero vulnerabilities; Gitleaks found no leaks in the source snapshot and the pre-release 70-commit Git history. Run:
+The supplied tests use a temporary local replica set, real FFprobe/FFmpeg, and fake R2/SMTP; they do not send email or call paid AI. Local verification passed 12 unit/media tests and 22 integration tests, including portrait 4K frame extraction, short/long sampling coverage, shared-deadline cleanup, legacy thumbnail retention and migration dry-run/apply/rollback on the isolated test DB. Dependency audit reported zero vulnerabilities; Gitleaks found no leaks in the source snapshot and the pre-release 70-commit Git history. Run:
 
 ```text
 npm ci

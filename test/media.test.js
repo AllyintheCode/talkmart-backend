@@ -61,3 +61,26 @@ test("portrait 4K keyframes preserve a shared deadline and clean up on timeout",
     assert.deepEqual(await frameDirectories(), before);
   } finally { await fs.rm(directory, { recursive: true, force: true }); }
 });
+
+test("short and long video samples cover all four time windows and reject incomplete sampling", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "talkmart-test-"));
+  try {
+    const colors = [["red", [255, 0, 0]], ["green", [0, 128, 0]], ["blue", [0, 0, 255]], ["yellow", [255, 255, 0]]];
+    for (const duration of [8, 60]) {
+      const input = path.join(directory, `samples-${duration}.mp4`);
+      const inputs = colors.flatMap(([color]) => ["-f", "lavfi", "-i", `color=c=${color}:s=160x120:r=10:d=${duration / 4}`]);
+      await exec(ffmpeg, ["-nostdin", "-hide_banner", "-loglevel", "error", ...inputs,
+        "-filter_complex_threads", "1", "-filter_complex", "[0:v][1:v][2:v][3:v]concat=n=4:v=1:a=0",
+        "-c:v", "libx264", "-threads", "2", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-y", input],
+      { timeout: 30000, windowsHide: true });
+      const frames = await extractKeyframes(input, 4, duration);
+      assert.equal(frames.length, 4);
+      for (let i = 0; i < frames.length; i++) {
+        const pixel = await sharp(Buffer.from(frames[i], "base64")).resize(1, 1).raw().toBuffer();
+        for (let channel = 0; channel < 3; channel++) assert.ok(Math.abs(pixel[channel] - colors[i][1][channel]) < 20);
+      }
+      if (duration === 8) await assert.rejects(extractKeyframes(input, 4, 20), { code: "AI_FRAMES_INCOMPLETE" });
+    }
+    await assert.rejects(extractKeyframes(path.join(directory, "samples-8.mp4"), 0, 8), { code: "AI_FRAME_PARAMETERS" });
+  } finally { await fs.rm(directory, { recursive: true, force: true }); }
+});

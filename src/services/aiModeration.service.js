@@ -14,6 +14,7 @@ const AI_BUDGET_MS = 20000;
 const AI_REQUEST_TIMEOUT_MS = 6500;
 const FRAME_BUDGET_MS = AI_BUDGET_MS - AI_REQUEST_TIMEOUT_MS;
 const FRAME_TIMEOUT_MS = 5000;
+const SINGLE_PASS_MAX_SECONDS = 30;
 let failures = 0;
 let circuitUntil = 0;
 let keyIndex = 0;
@@ -34,24 +35,44 @@ export function parseModerationResult(raw) {
   return { isAllowed: finalStatus === "approved", finalStatus, aiData: ai };
 }
 export async function extractKeyframes(filePath, count = 4, duration = 5, { deadline = Date.now() + FRAME_BUDGET_MS } = {}) {
+  if (!Number.isInteger(count) || count < 1 || count > 4 || !Number.isFinite(duration) || duration <= 0) {
+    throw Object.assign(new Error("Invalid keyframe sample parameters"), { code: "AI_FRAME_PARAMETERS" });
+  }
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "talkmart-frames-"));
   try {
-    const frames = [];
-    // Sequential bounded decoders prevent four CPU-heavy children per job.
-    for (let i = 0; i < count; i++) {
-      const remaining = deadline - Date.now();
+    const decode = async (position, output, filter, frameCount, timeout) => {
+      const remaining = Math.min(FRAME_BUDGET_MS, deadline - Date.now());
       if (remaining <= 0) throw Object.assign(new Error("Keyframe extraction deadline exceeded"), { code: "AI_FRAME_TIMEOUT" });
-      const output = path.join(directory, `${i}.jpg`);
       try {
         await exec(ffmpegPath, ["-nostdin", "-hide_banner", "-loglevel", "error", "-protocol_whitelist", "file,pipe", "-threads", "2",
-          "-ss", String(Math.max(0, duration * (i + 0.5) / count)), "-i", filePath,
-          "-threads", "1", "-filter_threads", "1", "-frames:v", "1", "-vf", "scale=640:-2", "-q:v", "3", "-y", output],
-        { timeout: Math.min(FRAME_TIMEOUT_MS, remaining), killSignal: "SIGKILL", maxBuffer: 1024 * 1024, windowsHide: true });
+          "-ss", String(position), "-i", filePath,
+          "-threads", "1", "-filter_threads", "1", "-frames:v", String(frameCount), "-vf", filter,
+          "-fps_mode", "vfr", "-q:v", "3", "-start_number", "0", "-y", output],
+        { timeout: Math.min(timeout, remaining), killSignal: "SIGKILL", maxBuffer: 1024 * 1024, windowsHide: true });
       } catch (error) {
         if (error.killed) error.code = "AI_FRAME_TIMEOUT";
         throw error;
       }
-      frames.push((await fs.readFile(output)).toString("base64"));
+    };
+    const interval = duration / count;
+    if (duration <= SINGLE_PASS_MAX_SECONDS) {
+      // Decode a short clip once instead of repeatedly decoding the same 4K GOP.
+      await decode(interval / 2, path.join(directory, "%d.jpg"),
+        `select='isnan(prev_selected_t)+gte(t-prev_selected_t,${interval})',scale=640:-2`, count, FRAME_BUDGET_MS);
+    } else {
+      // Sparse seeks avoid decoding several minutes of a long upload.
+      for (let i = 0; i < count; i++) {
+        await decode(interval * (i + 0.5), path.join(directory, `${i}.jpg`), "scale=640:-2", 1, FRAME_TIMEOUT_MS);
+      }
+    }
+    const frames = [];
+    for (let i = 0; i < count; i++) {
+      try {
+        frames.push((await fs.readFile(path.join(directory, `${i}.jpg`))).toString("base64"));
+      } catch (error) {
+        if (error.code === "ENOENT") throw Object.assign(new Error("Not all keyframe samples were produced"), { code: "AI_FRAMES_INCOMPLETE" });
+        throw error;
+      }
     }
     return frames;
   } finally { await fs.rm(directory, { recursive: true, force: true }); }
