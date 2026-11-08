@@ -24,6 +24,18 @@ export function privateExpirationIsSafe(rules = []) {
     return !("talkmart/private/".startsWith(prefix) || prefix.startsWith("talkmart/private/"));
   });
 }
+export async function checkPrivateLifecycle(readRules, { dashboardConfirmed = false } = {}) {
+  let rules;
+  try { rules = await readRules(); }
+  catch (error) {
+    if (error.name === "NoSuchLifecycleConfiguration") rules = [];
+    else if (error.name === "AccessDenied" || error.code === "AccessDenied") {
+      return { verified: dashboardConfirmed, source: dashboardConfirmed ? "dashboard" : "pending" };
+    } else throw error;
+  }
+  if (!privateExpirationIsSafe(rules)) throw new Error("PRIVATE_MEDIA_EXPIRATION_RULE_UNSAFE");
+  return { verified: true, source: "api" };
+}
 export async function openStaging() {
   if (process.platform !== "linux" || fs.realpathSync(process.cwd()) !== releaseDirectory) throw new Error("STAGING_RELEASE_DIRECTORY_REQUIRED");
   const env = parse(fs.readFileSync("/var/www/backend-test/.env", "utf8"));
