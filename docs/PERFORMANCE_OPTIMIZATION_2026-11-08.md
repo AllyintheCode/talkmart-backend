@@ -1,5 +1,7 @@
 # Lokal performans dəyişiklikləri — 8 noyabr 2026
 
+9 noyabr düzəlişi: [orijinal upload-da 12 Mbps həddinin yaratdığı əlavə encode və ölçmələr](PERFORMANCE_ORIGINAL_UPLOAD_FIX_2026-11-09.md). Aşağıdakı 12 Mbps qaydası və 26.72 MB rendition ölçmələri əvvəlki revision-un qeydidir.
+
 Sonrakı mərhələ: [AI/FFmpeg paralelliyi, 100k API və worker crash nəticələri](PERFORMANCE_CONTINUATION_2026-11-08.md). Aşağıdakı vaxtlar ilk optimizasiya ölçməsinin saxlanmış nəticələridir.
 
 Üç dəyişiklik `codex/performance-baseline` branch-də hazırlanıb və lokal yoxlanıb: təsdiqsiz medianın private saxlanması, Explore sorğusunun sürətləndirilməsi və uyğun H.264 videonun təkrar encode edilməməsi. Canlı VPS, onun bazası və R2 obyektləri dəyişdirilməyib. GitHub-a göndərilməyib.

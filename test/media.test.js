@@ -128,3 +128,32 @@ test("incompatible codec uses bounded H.264 transcode without changing resolutio
     assert.ok(metadata.durationSeconds >= 0.99);
   } finally { output?.cleanup(); await fs.rm(directory, { recursive: true, force: true }); }
 });
+
+test("level-compatible H.264 above 12 Mbps remuxes intact while impossible levels and rates fail eligibility", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "talkmart-test-"));
+  let output;
+  try {
+    const input = path.join(directory, "high-rate.mp4");
+    await exec(ffmpeg, ["-nostdin", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=160x120:rate=25:duration=2",
+      "-c:v", "libx264", "-threads", "2", "-preset", "fast", "-profile:v", "high", "-level:v", "5.2", "-pix_fmt", "yuv420p",
+      "-b:v", "20M", "-minrate", "20M", "-maxrate", "20M", "-bufsize", "40M", "-x264-params", "nal-hrd=cbr:force-cfr=1", "-y", input],
+    { timeout: 30000, windowsHide: true });
+    const original = await fs.readFile(input), metadata = await validateUploadedVideo(input);
+    assert.ok(metadata.bitRate > 12000000); assert.equal(metadata.level, 52);
+    assert.equal(canRemuxVideo(metadata, original.length), true);
+    output = await compressVideo(input); assert.equal(output.processingMode, "remux");
+    const result = await validateUploadedVideo(output.outputPath);
+    assert.equal(result.width, metadata.width); assert.equal(result.height, metadata.height);
+    const hashes = async file => JSON.parse((await exec(ffprobe.path, ["-v", "error", "-show_packets", "-show_data_hash", "sha256",
+      "-show_entries", "packet=data_hash", "-of", "json", file], { windowsHide: true })).stdout).packets.map(packet => packet.data_hash);
+    assert.deepEqual(await hashes(output.outputPath), await hashes(input));
+    assert.deepEqual(await fs.readFile(input), original);
+    const original4k = { ...metadata, width: 2160, height: 3840, bitRate: 12784205, profile: "High", level: 52 };
+    assert.equal(canRemuxVideo(original4k, 32350603), true);
+    for (const change of [{ level: 17 }, { level: 60 }, { level: null }, { bitRate: null }, { bitRate: Infinity }, { bitRate: 360000001 }, { level: 10 }]) {
+      assert.equal(canRemuxVideo({ ...original4k, ...change }, 32350603), false);
+    }
+    assert.equal(canRemuxVideo({ ...original4k, profile: "Main", bitRate: 288000001 }, 32350603), false);
+    assert.equal(canRemuxVideo(original4k, 195000000), false);
+  } finally { output?.cleanup(); await fs.rm(directory, { recursive: true, force: true }); }
+});

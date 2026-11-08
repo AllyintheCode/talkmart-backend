@@ -1,5 +1,7 @@
 # Optimizasiyanın davamı — 8 noyabr 2026
 
+9 noyabr real server nəticəsi: admin/user/guest və public/private media silinməsi sınaqları keçdi. Yeni upload AI tərəfindən təsdiqləndi, lakin media commit 127.254 s çəkdi. Bu səbəbdən [orijinal upload üçün bitrate seçim düzəlişi](PERFORMANCE_ORIGINAL_UPLOAD_FIX_2026-11-09.md) hazırlanıb; serverdə təkrar sürət ölçməsi qalır.
+
 Bu mərhələdə AI/FFmpeg paralel hazırlama tətbiq edilib, 100k video ilə API ölçülüb və faktiki worker prosesinin qəfil dayanması yoxlanıb. Kod lokal `codex/performance-baseline` branch-dədir. Real VPS, production baza və bucket-lər dəyişdirilməyib.
 
 ## Hazır olan hissələr

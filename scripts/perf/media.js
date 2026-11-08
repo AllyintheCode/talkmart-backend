@@ -32,6 +32,14 @@ if (!values["isolated-worker"]) {
   const { compressVideo, generateThumbnail } = await import("../../src/services/compress.service.js");
   const { default: redis } = await import("../../src/config/redis.js");
   const exec = promisify(execFile);
+  async function packetHashes(filename, metadata) {
+    const { default: ffprobe } = await import("ffprobe-static");
+    const { stdout } = await exec(ffprobe.path, ["-v", "error", "-show_packets", "-show_data_hash", "sha256", "-show_entries", "packet=stream_index,data_hash", "-of", "json", filename],
+      { timeout: 30000, windowsHide: true, maxBuffer: 16 * 1024 * 1024 });
+    const streams = {};
+    for (const packet of JSON.parse(stdout).packets) (streams[packet.stream_index] ||= []).push(packet.data_hash);
+    return { video: streams[metadata.videoStreamIndex] || [], audio: metadata.audioStreamIndex === null ? [] : streams[metadata.audioStreamIndex] || [] };
+  }
   const report = { kind: "local-media-baseline", machine: machine(), baselineCommit: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
     source: await sourceRevision(),
     startedAt: new Date().toISOString(), inputKind: values.input ? "provided-local-file" : "synthetic-generated", runs, cases: [], excludes: ["Gemini network/model latency", "upload/download", "R2/CDN", "queue waiting", "FFmpeg child CPU/RAM", "quality metrics and mobile playback"],
@@ -88,6 +96,12 @@ if (!values["isolated-worker"]) {
           measured.outputBytes = (await fs.stat(output.outputPath)).size;
           const outputMetadata = await validateUploadedVideo(output.outputPath);
           measured.outputMetadata = outputMetadata;
+          if (measured.processingMode === "remux") {
+            const beforePackets = await packetHashes(filename, metadata), afterPackets = await packetHashes(output.outputPath, outputMetadata);
+            measured.encodedPacketsUnchanged = JSON.stringify(beforePackets) === JSON.stringify(afterPackets);
+            measured.videoPackets = afterPackets.video.length; measured.audioPackets = afterPackets.audio.length;
+            if (!measured.encodedPacketsUnchanged) throw new Error("REMUX_PACKETS_CHANGED");
+          }
           start = performance.now();
           const thumbnail = await generateThumbnail(filename, path.extname(filename));
           measured.thumbnailMs = performance.now() - start;

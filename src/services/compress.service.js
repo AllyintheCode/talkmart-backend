@@ -12,6 +12,16 @@ import { validateUploadedVideo } from "./mediaProbe.service.js";
 ffmpeg.setFfmpegPath(ffmpegStatic);
 ffmpeg.setFfprobePath(ffprobeStatic.path);
 
+// H.264 level MaxBR values (kbit/s). NAL-rate factors are 1200 for
+// Baseline/Main and 1500 for High, as used by FFmpeg's H.264 level check.
+// A fixed bandwidth target must not force an otherwise compatible 4K stream
+// through a lossy encoder when the chosen policy is to preserve the original.
+const H264_LEVEL_MAX_BR = Object.freeze({
+  9: 128, 10: 64, 11: 192, 12: 384, 13: 768, 20: 2000, 21: 4000, 22: 4000,
+  30: 10000, 31: 14000, 32: 20000, 40: 20000, 41: 50000, 42: 50000,
+  50: 135000, 51: 240000, 52: 240000,
+});
+
 // ============================
 // ŞƏKİL SIXIŞDIRMA (sharp)
 // ============================
@@ -118,11 +128,12 @@ export const compressVideo = async (input, originalExt = ".mp4") => {
 };
 
 export function canRemuxVideo(metadata, bytes) {
+  const maxBitRate = H264_LEVEL_MAX_BR[metadata.level] * (metadata.profile === "High" ? 1500 : 1200);
   return Boolean(metadata.codec === "h264" && metadata.formatName?.includes("mp4") &&
     metadata.pixelFormat === "yuv420p" && ["Baseline", "Constrained Baseline", "Main", "High"].includes(metadata.profile) &&
     metadata.level > 0 && metadata.level <= 52 && metadata.rotation % 360 === 0 &&
     metadata.frameRate && metadata.frameRate <= 30 && metadata.nominalFrameRate && metadata.nominalFrameRate <= 30 &&
-    metadata.bitRate > 0 && metadata.bitRate <= 12000000 && bytes > 0 && bytes < 195000000 && metadata.streamCount <= 2 &&
+    metadata.bitRate > 0 && metadata.bitRate <= maxBitRate && bytes > 0 && bytes < 195000000 && metadata.streamCount <= 2 &&
     ((!metadata.audioCodec && metadata.audioStreamIndex === null) || (metadata.audioCodec === "aac" && metadata.audioChannels > 0 && metadata.audioChannels <= 2)));
 }
 
