@@ -81,7 +81,7 @@ if (!values["isolated-worker"]) {
           item.metadata = metadata;
           start = performance.now();
           try {
-            const frames = await extractKeyframes(filename, 4, metadata.duration);
+            const frames = await extractKeyframes(filename, 4, metadata.duration, { onPlan: plan => { measured.frameSampling = plan; } });
             measured.framesMs = performance.now() - start;
             measured.frameCount = frames.length;
           } catch (error) {

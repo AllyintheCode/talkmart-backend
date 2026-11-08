@@ -38,6 +38,29 @@ Lint, 30 unit/media/performance/staging və 30 integration testi keçdi: **60 te
 
 `scripts/staging/restart-test-worker.js` test qovluğu/proses yollarını və boş video növbəsini yoxlayıb yalnız `talkmart-worker-test`-i yenidən başladır. Yeni PID-yə aid heartbeat, test health, test API və production PID-lərinin saxlanması yoxlanır. API endpointləri və MongoDB schema dəyişmir; mövcud videolar yenidən emal edilmir.
 
-Serverə çıxarılma və yeni upload vaxtı bu qeydin yazıldığı anda hələ gözlənilir. Düzəlişdən sonra eyni mənbə **yeni** Idempotency-Key (`perf-upload-20261109-02`) ilə yüklənməlidir. Yeni commit vaxtı, worker AI/FFmpeg/preparation göstəriciləri və çıxış ölçüsü müqayisə olunur. APK-də H.264 level 5.2 olan orijinal axının səs/istiqamət/seek/playback uyğunluğu ayrıca yoxlanmalıdır. Production-a keçid edilməyib.
+## Test serverində təsdiqlənmiş nəticə
+
+`6c794e124ccebf4e74bcc5a2c665f32e0d1bb346` yalnız test worker-ə tətbiq edilib; yeni heartbeat yoxlanıb, test API və production proseslərinin PID-ləri saxlanıb. Serverdə media/preparation üzrə 9 test də keçib. Yeni upload `perf-upload-20261109-02`, video ID `6af0ee2f87dd1d2bb07b2f20` ilə birinci cəhddə `ready/approved/active`, AI 95 bal alıb.
+
+| Mərhələ | Köhnə worker / upload | Düzəlişdən sonra |
+|---|---:|---:|
+| FFmpeg hazırlama | 117,040 ms | 350 ms |
+| AI, kadrlar daxil | 14,314 ms | 11,056 ms |
+| Paralel hazırlama | 117,042 ms | 11,056 ms |
+| R2 download | 3,375 ms | 1,169 ms |
+| Private upload və thumbnail mərhələsi | 3,907 ms | 4,714 ms |
+| Worker işi | 130,397 ms | 20,459 ms |
+| createdAt → private media commit | 127.254 s | 20.524 s |
+| Private/public MP4 ölçüsü | 26,723,964 byte | 32,350,392 byte |
+
+Worker işi bu sınaqda təxminən **6.37 dəfə sürətlənib**, vaxt 84.31% azalıb. İki worker prosesinin hərəsində yalnız bir media job nümunəsi var; bunlar p95 təminatı deyil. Hər iki halda `sourceBytes=32,350,603`, müddət 20 s, bir cəhd və AI 95 baldır. Mənbə internet upload-u ayrıca ölçülməyib. `r2_upload_ms` thumbnail yaradılmasını da əhatə edir; yalnız şəbəkə vaxtı deyil. `ai_ms` kadr çıxarma və model çağırışını birlikdə ölçür.
+
+Yeni worker PID 677419, heartbeat `2026-11-08T21:49:57.121Z`; müşahidə `2026-11-08T21:50:02.092Z`-dir. İstifadəçi yeni videonun telefondakı test APK-də normal oynadığını və irəli/geri sarıldığını təsdiqləyib. Bu mənbədə səs yoxdur, ayrıca səsli mobil klip sınağı kimi təqdim edilmir.
+
+Server hesabatları: `tmp/upload-check-6af0e6d487dd1d2bb07b2f1f-0c758e63-21cd-4f46-aba8-2583d6ccd1ca.json` və `tmp/upload-check-6af0ee2f87dd1d2bb07b2f20-3d3f70aa-62b4-4086-afcf-1204ced319ae.json`. Lokal əməliyyat qeydi: `tmp/deployment/bitrate-fix-manifest.json`.
+
+AI mərhələsi 11.056 s və worker işi 20.459 s olduğuna görə PDF-dəki `<5 s AI` və sərt `<20 s processing` hədəflərinin keçdiyi iddia edilmir. Növbəti profiling kadr/model vaxtını ayırmaq üçündür. Direct upload və Redis/CDN ayrıca mərhələlərdir. Production-a keçid edilməyib.
 
 Texniki mənbə: [FFmpeg H.264 level yoxlaması](https://github.com/FFmpeg/FFmpeg/blob/master/libavcodec/h264_levels.c) — H.264 MaxBR cədvəli və profil üzrə NAL bitrate faktorları.
+
+Növbəti lokal mərhələ: [AI kadr seçimi və ayrıca vaxt ölçmələri](PERFORMANCE_AI_SAMPLING_2026-11-09.md). Yeni kadr optimizasiyası üçün serverdə ayrıca upload nəticəsi hələ tələb olunur.

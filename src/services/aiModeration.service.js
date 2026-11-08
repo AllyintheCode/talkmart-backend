@@ -9,12 +9,13 @@ import ffmpegPath from "ffmpeg-static";
 import { downloadFromR2 } from "./r2Upload.service.js";
 import { publishIfEligible } from "./videoState.service.js";
 import { logger } from "../utils/logger.js";
+import { observe } from "../utils/metrics.js";
+import { chooseFrameSampling } from "./frameSampling.service.js";
 const exec = promisify(execFile);
 const AI_BUDGET_MS = 20000;
 const AI_REQUEST_TIMEOUT_MS = 6500;
 const FRAME_BUDGET_MS = AI_BUDGET_MS - AI_REQUEST_TIMEOUT_MS;
 const FRAME_TIMEOUT_MS = 5000;
-const SINGLE_PASS_MAX_SECONDS = 30;
 let failures = 0;
 let circuitUntil = 0;
 let keyIndex = 0;
@@ -34,12 +35,15 @@ export function parseModerationResult(raw) {
     ai.serviceProvided !== false && ai.confidenceScore >= 85 ? "approved" : "review";
   return { isAllowed: finalStatus === "approved", finalStatus, aiData: ai };
 }
-export async function extractKeyframes(filePath, count = 4, duration = 5, { deadline = Date.now() + FRAME_BUDGET_MS } = {}) {
+export async function extractKeyframes(filePath, count = 4, duration = 5, { deadline = Date.now() + FRAME_BUDGET_MS, onPlan } = {}) {
   if (!Number.isInteger(count) || count < 1 || count > 4 || !Number.isFinite(duration) || duration <= 0) {
     throw Object.assign(new Error("Invalid keyframe sample parameters"), { code: "AI_FRAME_PARAMETERS" });
   }
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "talkmart-frames-"));
   try {
+    if (deadline <= Date.now()) throw Object.assign(new Error("Keyframe extraction deadline exceeded"), { code: "AI_FRAME_TIMEOUT" });
+    const plan = await chooseFrameSampling(filePath, count, duration, deadline);
+    onPlan?.(plan);
     const decode = async (position, output, filter, frameCount, timeout) => {
       const remaining = Math.min(FRAME_BUDGET_MS, deadline - Date.now());
       if (remaining <= 0) throw Object.assign(new Error("Keyframe extraction deadline exceeded"), { code: "AI_FRAME_TIMEOUT" });
@@ -55,13 +59,14 @@ export async function extractKeyframes(filePath, count = 4, duration = 5, { dead
       }
     };
     const interval = duration / count;
-    if (duration <= SINGLE_PASS_MAX_SECONDS) {
+    if (plan.strategy === "single-pass") {
       // Absolute sample positions avoid accumulating one-frame rounding errors
       // until the fourth sample falls beyond a short/non-integer-FPS clip.
       await decode(interval / 2, path.join(directory, "%d.jpg"),
         `select='gte(t,selected_n*${interval})',scale=640:-2`, count, FRAME_BUDGET_MS);
     } else {
-      // Sparse seeks avoid decoding several minutes of a long upload.
+      // Sparse seeks skip long clips or avoid unnecessary decoding between
+      // short GOPs. They retain the same accurate centre-of-window samples.
       for (let i = 0; i < count; i++) {
         await decode(interval * (i + 0.5), path.join(directory, `${i}.jpg`), "scale=640:-2", 1, FRAME_TIMEOUT_MS);
       }
@@ -87,11 +92,15 @@ export async function validateVideoContentAI({ tempFilePath, categoryName, durat
     hasBannedContent: { type: SchemaType.BOOLEAN }, confidenceScore: { type: SchemaType.INTEGER }, reasoning: { type: SchemaType.STRING },
   }, required: ["serviceProvided", "matchesCategory", "hasBannedContent", "confidenceScore", "reasoning"] };
   try {
-    const images = (await extractKeyframes(tempFilePath, 4, duration, { deadline: deadline - AI_REQUEST_TIMEOUT_MS }))
-      .map((data) => ({ inlineData: { mimeType: "image/jpeg", data } }));
+    const framesStarted = Date.now();
+    let frames;
+    try { frames = await extractKeyframes(tempFilePath, 4, duration, { deadline: deadline - AI_REQUEST_TIMEOUT_MS }); }
+    finally { observe("ai_frames_ms", Date.now() - framesStarted); }
+    const images = frames.map((data) => ({ inlineData: { mimeType: "image/jpeg", data } }));
     for (let attempt = 0; attempt < 2; attempt++) {
       const remaining = deadline - Date.now();
       if (remaining <= 0) break;
+      const modelStarted = Date.now();
       try {
         const available = keys();
         const model = new GoogleGenerativeAI(available[keyIndex % available.length]).getGenerativeModel({
@@ -107,6 +116,7 @@ export async function validateVideoContentAI({ tempFilePath, categoryName, durat
         if (result.finalStatus === "approved" && riskCategories.includes(String(categoryName).toLowerCase())) return review("MANUAL_CATEGORY_POLICY");
         return result;
       } catch (err) { logger.warn("ai_attempt_failed", err); switchApiKey(); }
+      finally { observe("ai_model_ms", Date.now() - modelStarted); }
     }
   } catch (err) { logger.warn("ai_frames_failed", err); }
   if (++failures >= 3) circuitUntil = Date.now() + 60000;
