@@ -7,9 +7,10 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import ffmpeg from "ffmpeg-static";
+import ffprobe from "ffprobe-static";
 import sharp from "sharp";
 import { validateUploadedVideo } from "../src/services/mediaProbe.service.js";
-import { compressVideo, generateThumbnail } from "../src/services/compress.service.js";
+import { compressVideo, generateThumbnail, canRemuxVideo } from "../src/services/compress.service.js";
 import { extractKeyframes } from "../src/services/aiModeration.service.js";
 const exec = promisify(execFile);
 
@@ -66,9 +67,9 @@ test("short and long video samples cover all four time windows and reject incomp
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "talkmart-test-"));
   try {
     const colors = [["red", [255, 0, 0]], ["green", [0, 128, 0]], ["blue", [0, 0, 255]], ["yellow", [255, 255, 0]]];
-    for (const duration of [8, 60]) {
+    for (const [duration, rate] of [[1, 25], [1, "24000/1001"], [8, 10], [60, 10]]) {
       const input = path.join(directory, `samples-${duration}.mp4`);
-      const inputs = colors.flatMap(([color]) => ["-f", "lavfi", "-i", `color=c=${color}:s=160x120:r=10:d=${duration / 4}`]);
+      const inputs = colors.flatMap(([color]) => ["-f", "lavfi", "-i", `color=c=${color}:s=160x120:r=${rate}:d=${duration / 4}`]);
       await exec(ffmpeg, ["-nostdin", "-hide_banner", "-loglevel", "error", ...inputs,
         "-filter_complex_threads", "1", "-filter_complex", "[0:v][1:v][2:v][3:v]concat=n=4:v=1:a=0",
         "-c:v", "libx264", "-threads", "2", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-y", input],
@@ -83,4 +84,47 @@ test("short and long video samples cover all four time windows and reject incomp
     }
     await assert.rejects(extractKeyframes(path.join(directory, "samples-8.mp4"), 0, 8), { code: "AI_FRAME_PARAMETERS" });
   } finally { await fs.rm(directory, { recursive: true, force: true }); }
+});
+
+test("compatible H.264/AAC remux preserves encoded packets, resolution and original input", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "talkmart-test-"));
+  let output;
+  try {
+    const input = path.join(directory, "compatible.mp4");
+    await exec(ffmpeg, ["-nostdin", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=size=160x120:rate=25:duration=2",
+      "-f", "lavfi", "-i", "sine=frequency=440:duration=2", "-c:v", "libx264", "-threads", "2", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", "-y", input], { windowsHide: true });
+    const original = await fs.readFile(input);
+    const metadata = await validateUploadedVideo(input);
+    assert.equal(canRemuxVideo(metadata, original.length), true);
+    output = await compressVideo(input);
+    assert.equal(output.processingMode, "remux");
+    const decoded = await validateUploadedVideo(output.outputPath);
+    assert.equal(decoded.width, metadata.width); assert.equal(decoded.height, metadata.height);
+    assert.equal(decoded.frameRate, metadata.frameRate);
+    async function packets(file) {
+      const { stdout } = await exec(ffprobe.path, ["-v", "error", "-show_packets", "-show_data_hash", "sha256", "-show_entries", "packet=stream_index,data_hash", "-of", "json", file], { windowsHide: true, maxBuffer: 1024 * 1024 });
+      const streams = {};
+      for (const packet of JSON.parse(stdout).packets) (streams[packet.stream_index] ||= []).push(packet.data_hash);
+      return streams;
+    }
+    assert.deepEqual(await packets(output.outputPath), await packets(input));
+    assert.deepEqual(await fs.readFile(input), original);
+    for (const change of [{ pixelFormat: "yuv420p10le" }, { rotation: 90 }, { bitRate: 13000000 }, { audioCodec: "opus" }, { frameRate: 60 }, { frameRate: null }, { profile: "High 10" }]) {
+      assert.equal(canRemuxVideo({ ...metadata, ...change }, original.length), false);
+    }
+  } finally { output?.cleanup(); await fs.rm(directory, { recursive: true, force: true }); }
+});
+
+test("incompatible codec uses bounded H.264 transcode without changing resolution or shortening video", async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "talkmart-test-"));
+  let output;
+  try {
+    const input = path.join(directory, "mpeg4.mp4");
+    await exec(ffmpeg, ["-f", "lavfi", "-i", "testsrc2=size=160x120:rate=25:duration=1", "-c:v", "mpeg4", "-y", input], { windowsHide: true });
+    output = await compressVideo(input);
+    assert.equal(output.processingMode, "transcode");
+    const metadata = await validateUploadedVideo(output.outputPath);
+    assert.equal(metadata.codec, "h264"); assert.equal(metadata.width, 160); assert.equal(metadata.height, 120);
+    assert.ok(metadata.durationSeconds >= 0.99);
+  } finally { output?.cleanup(); await fs.rm(directory, { recursive: true, force: true }); }
 });

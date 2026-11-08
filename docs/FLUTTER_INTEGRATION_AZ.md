@@ -1,5 +1,7 @@
 # Flutter üçün Talkmart test API təlimatı
 
+8 noyabr lokal optimizasiya branch-i üçün əlavə: aşağıdakı [private preview bölməsi](#private-preview-lokal-optimizasiya-buraxılışı) yeni test buraxılışı quraşdırıldıqdan sonra tətbiq olunur. Bu dəyişiklik hələ serverə çıxarılmayıb.
+
 Backend dəyişiklikləri hazırda test mühitindədir. Giriş, provider video yükləməsi, emal, AI təsdiqi, oynatma, bəyənmə/yadda saxlama və admin moderasiyası real serverdə yoxlanılıb. Flutter uyğunlaşdırması və tətbiq daxilində sınaq qalıb.
 
 - Test base URL: `https://api.talkmart.az/test-api/api`
@@ -30,3 +32,15 @@ Aşağıdakı endpoint yolları test base URL-ə əlavə olunur. Test build-in f
 Tətbiqdə sınaq ardıcıllığı: guest lent və video oynatma → user login → like/unlike və save/unsave → əlaqə və WhatsApp → provider login və upload → statusların yenilənməsi → OTP və şifrə sıfırlama → ayrıca test hesabında silinmə.
 
 Test build-i və yoxlamaların nəticələrini göndərin. Uğursuz sorğu üçün endpoint, HTTP status, `error.code` və `meta.requestId` kifayətdir. Canlı API-yə keçid backend buraxılışı ilə uyğunlaşdırılacaq.
+
+## Private preview: lokal optimizasiya buraxılışı
+
+Upload sahələri və endpointlər saxlanılıb. Uyğun H.264 faylı orijinal ölçüdə təkrar encode edilmədən hazırlanır; digər fayllar H.264/AAC-a çevrilir.
+
+- Sahibin `GET /videos/my-videos` və admin video siyahısında təsdiqsiz/gizli hazır video üçün `videoUrl` və `thumbnail` müddətli imzalı link ola bilər. `mediaUrlExpiresAt` varsa link 10 dəqiqəlik preview-dir. Emal bitməyibsə URL boş qala bilər.
+- Bu URL-ni daimi bazaya, loglara və analytics-ə yazmayın. Saxlanmış linki girişdən və hesab dəyişməsindən sonra təkrar istifadə etməyin. Video ekranı açılarkən və müddət bitəndə tokenlə siyahını yeniləyin, həmin video ID-sinin yeni URL-sini player-ə verin. Vaxtı bitmiş media linkinin `403` cavabı API access token-in bitməsi demək deyil.
+- İmzalı R2 URL-ni query parametrləri daxil olduğu kimi açın. Ona backend Bearer token-i əlavə etməyin. Flutter Web üçün private bucket GET/HEAD CORS və Range playback ayrıca yoxlanmalıdır.
+- Profil sahibi `review`/`rejected` videosuna baxa bilər; ictimai lentdə və başqa istifadəçinin profil görünüşündə həmin video görünməməlidir. Status nişanları `processingStatus`, `moderationStatus`, `status` üzrə göstərilsin.
+- Admin təsdiq cavabı zamanı saxlama xidməti əlçatan deyilsə video `approved`, amma `inactive` qala bilər. Siyahını yeniləyərək `ready` + `approved` + `active` nəticəsini gözləyin. İctimai URL sonrakı təkrar təsdiqdə dəyişə bilər; video ID-si UI identifikatoru olaraq qalır.
+
+APK sınağı: səssiz və səsli H.264 → başqa codec → istiqamət/seek/səs → rədd edilmiş videonun öz profilində preview-si → 10 dəqiqə sonra yenilənmə → admin təsdiqi və ictimai oynatma → gizlətmə/rədd və lentdən çıxma. Artıq endirilmiş/cached public faylın dərhal yox olmasına əsaslanmayın.

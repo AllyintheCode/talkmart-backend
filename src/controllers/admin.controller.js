@@ -9,7 +9,8 @@ import AuditEvent from "../models/AuditEvent.js";
 import { parsePagination, cursorFilter, nextCursor } from "../utils/pagination.js";
 import { deleteUserCompletely } from "../services/accountCleanup.service.js";
 import { deleteVideoCompletely } from "../services/videoCleanup.service.js";
-import { setAdminDecision, canPublishVideo, invalidateVideoCache } from "../services/videoState.service.js";
+import { setAdminDecision, canPreparePublication, publishIfEligible, invalidateVideoCache } from "../services/videoState.service.js";
+import { videoForViewer } from "../services/videoMedia.service.js";
 import { invalidateUserSession } from "../middlewares/auth.middleware.js";
 import { getQueueStats } from "../services/videoProcessing.service.js";
 import { getMetrics } from "../utils/metrics.js";
@@ -367,7 +368,8 @@ async function listVideos(req, res, reviewOnly = false) {
       .sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limit).maxTimeMS(5000).lean(),
     Video.countDocuments(filter).maxTimeMS(5000),
   ]);
-  return res.json({ success: true, videos, total, page, count: videos.length, totalPages: Math.ceil(total / limit), nextCursor: nextCursor(videos, limit) });
+  res.setHeader("Cache-Control", "private, no-store");
+  return res.json({ success: true, videos: await Promise.all(videos.map(video => videoForViewer(video, req.user))), total, page, count: videos.length, totalPages: Math.ceil(total / limit), nextCursor: nextCursor(videos, limit) });
 }
 export const getVideosForReview = (req, res) => listVideos(req, res, true);
 export const getAllVideos = (req, res) => listVideos(req, res);
@@ -383,21 +385,25 @@ export const adminUpdateVideoStatus = async (req, res) => {
   if (!video) return res.status(404).json({ error: "NOT_FOUND" });
   const owner = await User.findById(video.providerId);
   const wantsActive = req.body.status === "active";
-  if (wantsActive && !canPublishVideo({ ...video.toObject(), visibility: "public" }, owner)) {
+  if (wantsActive && !canPreparePublication({ ...video.toObject(), visibility: "public" }, owner)) {
     return res.status(409).json({ error: "VIDEO_NOT_PUBLISHABLE", message: "Video must be ready and approved" });
   }
   const updated = await Video.findOneAndUpdate({ _id: video._id, decisionVersion: video.decisionVersion, status: { $ne: "deleting" }, processingStatus: video.processingStatus },
-    { $set: { status: req.body.status, visibility: wantsActive ? "public" : "hidden" }, $inc: { decisionVersion: 1 } }, { returnDocument: "after", runValidators: true });
+    { $set: { status: "inactive", visibility: wantsActive ? "public" : "hidden", mediaRevocationPending: !wantsActive }, $inc: { decisionVersion: 1 } }, { returnDocument: "after", runValidators: true });
   if (!updated) return res.status(409).json({ error: "STATE_CHANGED" });
-  await invalidateVideoCache();
   await AuditEvent.create({ actorId: req.user._id, targetId: video._id, action: `video_${req.body.status}` });
-  return res.json({ success: true, video: updated });
+  let reconciled = updated;
+  try { reconciled = await publishIfEligible(video._id) || updated; }
+  catch (error) { logger.warn("admin_media_reconciliation_retry", error); }
+  res.setHeader("Cache-Control", "private, no-store");
+  return res.json({ success: true, video: await videoForViewer(reconciled, req.user) });
 };
 export const moderateVideo = async (req, res) => {
   if (req.body.feedback !== undefined && (typeof req.body.feedback !== "string" || req.body.feedback.length > 2000)) return res.status(400).json({ error: "INVALID_FEEDBACK" });
   const video = await setAdminDecision(req.params.id, req.body.action, req.user._id, req.body.feedback || "");
   if (!video) return res.status(404).json({ error: "NOT_FOUND" });
-  return res.json({ success: true, video });
+  res.setHeader("Cache-Control", "private, no-store");
+  return res.json({ success: true, video: await videoForViewer(video, req.user) });
 };
 export const getReports = async (req, res) => {
   const { page, limit, skip } = parsePagination(req.query);
@@ -420,14 +426,18 @@ export const updateReport = async (req, res) => {
   return res.json({ success: true, report });
 };
 export const getOperations = async (req, res) => {
-  const [queue, reportBacklog, notificationFailures, staleLeases, deleting] = await Promise.all([
+  const [queue, reportBacklog, notificationFailures, staleLeases, deleting, awaitingPublication, mediaRevocationBacklog, staleMediaLeases] = await Promise.all([
     getQueueStats(), Report.countDocuments({ status: { $in: ["new", "in_progress"] } }),
     Report.countDocuments({ notificationStatus: "failed" }),
     Video.countDocuments({ processingStatus: "processing", lockedUntil: { $lt: new Date() } }),
     Video.countDocuments({ status: "deleting" }),
+    Video.countDocuments({ processingStatus: "ready", moderationStatus: "approved", status: "inactive", visibility: "public" }),
+    Video.countDocuments({ $or: [{ mediaRevocationPending: true }, { "publicDeletionKeys.0": { $exists: true } }] }),
+    Video.countDocuments({ mediaPublicationId: { $ne: null }, mediaPublicationUntil: { $lte: new Date() } }),
   ]);
   const workers = await WorkerStatus.find().lean();
-  return res.json({ success: true, workers, queue, reportBacklog, notificationFailures, staleLeases, deleting, latency: getMetrics(), memory: process.memoryUsage() });
+  return res.json({ success: true, workers, queue, reportBacklog, notificationFailures, staleLeases, deleting,
+    awaitingPublication, mediaRevocationBacklog, staleMediaLeases, latency: getMetrics(), memory: process.memoryUsage() });
 };
 export const retryVideo = async (req, res) => {
   const video = await Video.findOneAndUpdate({ _id: req.params.id, processingStatus: "failed", stagingKey: { $ne: "" }, status: { $ne: "deleting" } },

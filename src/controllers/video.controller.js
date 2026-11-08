@@ -13,6 +13,7 @@ import { parsePagination, isValidObjectId, cursorFilter, nextCursor } from "../u
 import { observe } from "../utils/metrics.js";
 import { publicVideoFilter, publicOwnerFilter } from "../services/videoState.service.js";
 import { fail } from "../utils/http.js";
+import { videoForViewer } from "../services/videoMedia.service.js";
 
 const unlinkQuiet = (filePath) => {
   try {
@@ -148,12 +149,11 @@ export const getMyVideos = async (req, res) => {
   try {
     const { page, limit, skip } = parsePagination(req.query);
     const videos = await Video.find({ providerId: req.user._id, status: { $ne: "deleting" }, ...cursorFilter(req.query.cursor) }).sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limit).maxTimeMS(5000);
-
-
+    res.setHeader("Cache-Control", "private, no-store");
     return res.status(200).json({
       success: true,
       count: videos.length,
-      videos, page, nextCursor: nextCursor(videos, limit),
+      videos: await Promise.all(videos.map(video => videoForViewer(video, req.user))), page, nextCursor: nextCursor(videos, limit),
     });
   } catch (err) {
     logger.error("getMyVideos error:", err);
@@ -370,9 +370,7 @@ export const getExploreVideos = async (req, res) => {
     else if (sort === "price_low") sortOption = { price: 1, _id: -1 };
     else if (sort === "price_high") sortOption = { price: -1, _id: -1 };
 
-    const basePipeline = [
-      { $match: matchStage },
-      // Provider məlumatları — fullName, companyName, phone, address
+    const ownerStages = [
       {
         $lookup: {
           from: "users",
@@ -386,18 +384,38 @@ export const getExploreVideos = async (req, res) => {
     ];
 
     // Location filteri — provider-in address-inə görə filtrləyirik
+    let locationRegex;
     if (location) {
       const safeLocation = String(location).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const locationRegex = new RegExp(safeLocation, "i");
-      basePipeline.push({
+      locationRegex = new RegExp(safeLocation, "i");
+      ownerStages.push({
         $match: { "provider.providerProfile.address": locationRegex },
       });
     }
+
+    // Count videos per owner before joining users. A bounded owner set avoids a large $in query.
+    const ownerCounts = await Video.aggregate([
+      { $match: matchStage }, { $group: { _id: "$providerId", count: { $sum: 1 } } }, { $limit: 1001 },
+    ]).option({ maxTimeMS: 5000 });
+    const boundedOwners = ownerCounts.length <= 1000;
+    let fastTotal = 0;
+    if (boundedOwners) {
+      const User = (await import("../models/User.js")).default;
+      const typedOwners = ownerCounts.filter(owner => owner._id instanceof mongoose.Types.ObjectId);
+      const eligibleOwners = await User.find({ _id: { $in: typedOwners.map(owner => owner._id) }, ...publicOwnerFilter(""),
+        ...(locationRegex ? { "providerProfile.address": locationRegex } : {}) }).select("_id").lean().maxTimeMS(5000);
+      const eligible = new Set(eligibleOwners.map(owner => String(owner._id)));
+      fastTotal = typedOwners.filter(owner => eligible.has(String(owner._id))).reduce((sum, owner) => sum + owner.count, 0);
+      matchStage.providerId = { $in: eligibleOwners.map(owner => owner._id) };
+    }
+    const basePipeline = [{ $match: matchStage }, ...(boundedOwners ? [] : ownerStages)];
 
     const dataPipeline = [
       { $sort: sortOption },
       { $skip: skip },
       { $limit: limit },
+      // Recheck live owner visibility after paging even on the bounded fast path.
+      ...(boundedOwners ? ownerStages : []),
     ];
 
     // Login olmuş istifadəçi üçün isLiked / isSaved əlavə et
@@ -471,16 +489,15 @@ export const getExploreVideos = async (req, res) => {
       },
     });
 
-    basePipeline.push({
-      $facet: {
-        metadata: [{ $count: "total" }],
-        data: dataPipeline,
-      },
-    });
-
-    const result = await Video.aggregate(basePipeline).option({ maxTimeMS: 5000 });
-    const total = result[0]?.metadata[0]?.total || 0;
-    const videos = result[0]?.data || [];
+    let videos, total;
+    if (boundedOwners) {
+      total = fastTotal;
+      videos = total ? await Video.aggregate([...basePipeline, ...dataPipeline]).option({ maxTimeMS: 5000 }) : [];
+    } else {
+      const result = await Video.aggregate([...basePipeline, { $facet: { metadata: [{ $count: "total" }], data: dataPipeline } }]).option({ maxTimeMS: 5000 });
+      total = result[0]?.metadata[0]?.total || 0;
+      videos = result[0]?.data || [];
+    }
 
     return res.status(200).json({
       success: true,

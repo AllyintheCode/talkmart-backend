@@ -27,7 +27,10 @@ export async function cleanupVideoResources(video) {
     deleteFromR2(video.publicId),
     deleteFromR2(video.thumbnailPublicId),
     deleteFromR2(video.stagingKey),
+    deleteFromR2(video.privateVideoKey),
+    deleteFromR2(video.privateThumbnailKey),
     ...(video.mediaKeys || []).map((key) => deleteFromR2(key)),
+    ...(video.publicDeletionKeys || []).map(key => deleteFromR2(key)),
   ]);
 
   if (video.thumbnail && !video.thumbnailPublicId) {

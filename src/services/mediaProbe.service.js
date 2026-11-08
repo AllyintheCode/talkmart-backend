@@ -49,7 +49,7 @@ export async function validateUploadedVideo(filePath) {
 
   const formatName = String(metadata?.format?.format_name || "").toLowerCase();
   const duration = Number(metadata?.format?.duration || 0);
-  const videoStream = (metadata?.streams || []).find((s) => s.codec_type === "video");
+  const videoStream = (metadata?.streams || []).find(s => s.codec_type === "video" && !s.disposition?.attached_pic);
 
   if (!videoStream) {
     const err = new Error("NO_VIDEO_STREAM");
@@ -88,9 +88,29 @@ export async function validateUploadedVideo(filePath) {
 
   return {
     duration: Math.round(duration || 0),
+    durationSeconds: duration,
     width,
     height,
     codec,
     formatName,
+    pixelFormat: videoStream.pix_fmt || "",
+    profile: videoStream.profile || "",
+    level: Number(videoStream.level) || null,
+    bitRate: Number(videoStream.bit_rate || metadata.format.bit_rate) || null,
+    frameRate: rational(videoStream.avg_frame_rate || videoStream.r_frame_rate),
+    nominalFrameRate: rational(videoStream.r_frame_rate),
+    rotation: Number(videoStream.side_data_list?.find(item => item.rotation !== undefined)?.rotation ?? videoStream.tags?.rotate ?? 0),
+    audioCodec: metadata.streams.find(stream => stream.codec_type === "audio")?.codec_name || null,
+    audioChannels: Number(metadata.streams.find(stream => stream.codec_type === "audio")?.channels) || 0,
+    streamCount: metadata.streams.length,
+    videoStreamIndex: videoStream.index,
+    audioStreamIndex: metadata.streams.find(stream => stream.codec_type === "audio")?.index ?? null,
   };
+}
+
+function rational(value) {
+  if (typeof value !== "string") return null;
+  const [numerator, denominator = "1"] = value.split("/");
+  const result = Number(numerator) / Number(denominator);
+  return Number.isFinite(result) && result > 0 ? result : null;
 }

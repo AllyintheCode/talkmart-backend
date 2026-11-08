@@ -3,7 +3,7 @@ export default {
   "info": {
     "title": "TalkMart API Sənədləri",
     "description": "Flutter tərtibatçıları üçün Backend API endpointləri. Autentifikasiya və Video xidmətlərini ehtiva edir. Access JWTs require issuer, audience, typ=access and sessionVersion. Old tokens require re-login. API errors use error.code and error.message.",
-    "version": "1.1.0"
+    "version": "1.2.0"
   },
   "servers": [
     {
@@ -1332,7 +1332,7 @@ export default {
     "/videos/explore": {
       "get": {
         "summary": "Kəşf Et (Explore) səhifəsi üçün kateqoriyalı və axtarışlı list",
-        "description": "🔓 **GUEST DOSTu** — Token olmadan da işləyir. Login olmamış istifadəçilər sərbəst axtarış edə bilər.\n\n📦 **BİRLƏŞDİRİLMİŞ API** — Hər video ilə birlikdə provider telefon nömrəsi, likeCount, saveCount, viewCount, isLiked, isSaved hamısı bir response-da qaytarılır. Ayrıca `/engagement` və ya `/contact` çağırmağa ehtiyac yoxdur.",
+        "description": "🔓 **GUEST DOSTu** — Token olmadan da işləyir. Login olmamış istifadəçilər sərbəst axtarış edə bilər.\n\n📦 **BİRLƏŞDİRİLMİŞ API** — Hər video ilə birlikdə provider telefon nömrəsi, likeCount, saveCount, viewCount, isLiked, isSaved hamısı bir response-da qaytarılır. Ayrıca `/engagement` və ya `/contact` çağırmağa ehtiyac yoxdur.\n\nKeeps total, page, totalPages, nextCursor, filters and personal flags. Bounded owner counting avoids per-video owner lookups across the entire matching set; owner visibility is rechecked on returned items.",
         "tags": [
           "Video"
         ],
@@ -1995,7 +1995,8 @@ export default {
               "description": "Use nextCursor from the previous page with newest sort"
             }
           }
-        ]
+        ],
+        "description": "Processed media is private until approval. Owner-only videoUrl/thumbnail previews may be signed URLs valid for 10 minutes; mediaUrlExpiresAt is supplied. Refresh this list before reusing an expired preview. Cache-Control: private, no-store."
       }
     },
     "/videos/{id}": {
@@ -3609,7 +3610,8 @@ export default {
               "description": "Use nextCursor from the previous page with newest sort"
             }
           }
-        ]
+        ],
+        "description": "Admin-only media previews may be signed URLs valid for 10 minutes. Refresh the list on expiration. Cache-Control: private, no-store."
       }
     },
     "/admin/videos/{id}": {
@@ -3687,7 +3689,8 @@ export default {
           "200": {
             "description": "Status yeniləndi"
           }
-        }
+        },
+        "description": "Activation requires ready, approved media and an active owner. Hiding revokes public origin copies with retries. Previously issued public URLs can remain in external caches until their cache lifetime ends."
       }
     },
     "/admin/videos/moderation": {
@@ -3734,7 +3737,8 @@ export default {
               "description": "Use nextCursor from the previous page with newest sort"
             }
           }
-        ]
+        ],
+        "description": "Review and rejected media stays in private storage. Admin previews expire after 10 minutes; refresh this endpoint to renew them."
       }
     },
     "/admin/videos/{id}/moderate": {
@@ -3788,7 +3792,8 @@ export default {
           "200": {
             "description": "Moderasiya tamamlandı"
           }
-        }
+        },
+        "description": "Approval publishes ready private media. Rejection immediately removes API visibility and queues retryable origin object revocation. Storage failures preserve the decision and private preview."
       }
     },
     "/admin/users/{id}/verify-provider": {
@@ -4001,7 +4006,8 @@ export default {
           "403": {
             "description": "Admin role required"
           }
-        }
+        },
+        "description": "Includes awaitingPublication, mediaRevocationBacklog and staleMediaLeases for durable media reconciliation."
       }
     },
     "/admin/videos/{id}/retry": {

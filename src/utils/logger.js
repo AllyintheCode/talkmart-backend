@@ -2,6 +2,8 @@ const sensitiveKey = /password|secret|token|authorization|cookie|otp|pepper|api.
 export function redact(value, seen = new WeakSet()) {
   if (typeof value === "string") {
     let result = value;
+    result = result.replace(/https?:\/\/[^\s"'<>]+/gi, url =>
+      /[?&]X-Amz-(?:Signature|Credential|Security-Token)=/i.test(url) ? "[REDACTED_MEDIA_URL]" : url);
     for (const [key, secret] of Object.entries(process.env)) {
       if (sensitiveKey.test(key) && secret && secret.length >= 4) {
         for (const part of [secret, ...secret.split(",")]) {

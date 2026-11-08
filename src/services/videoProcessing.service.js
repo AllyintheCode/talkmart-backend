@@ -3,9 +3,9 @@ import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
 import Video from "../models/Video.js";
-import { compressVideo, generateThumbnail } from "./compress.service.js";
-import { uploadFileToR2, uploadToR2, downloadFromR2, deleteFromR2 } from "./r2Upload.service.js";
-import { validateVideoContentAI } from "./aiModeration.service.js";
+import { generateThumbnail } from "./compress.service.js";
+import { uploadFileToR2, uploadToR2, downloadFromR2, deleteFromR2, isPrivateMediaKey } from "./r2Upload.service.js";
+import { prepareVideoMedia } from "./mediaPreparation.service.js";
 import { validateUploadedVideo } from "./mediaProbe.service.js";
 import { publishIfEligible } from "./videoState.service.js";
 import { logger } from "../utils/logger.js";
@@ -33,10 +33,14 @@ export async function acquireLease(videoId) {
 const leaseFilter = (job) => ({ _id: job._id, workerId: job.workerId, processingStatus: "processing", status: { $ne: "deleting" }, lockedUntil: { $gt: new Date() } });
 
 export async function applyAiResult(job, ai, media) {
+  if (!isPrivateMediaKey(media.privateVideoKey) || !isPrivateMediaKey(media.privateThumbnailKey)) throw new Error("PRIVATE_MEDIA_REQUIRED");
   // Commit media and the AI decision together, so a crash cannot leave ready/pending.
   const mediaFields = {
-    ...media, processingStatus: "ready", completedAt: new Date(), workerId: null, lockedUntil: null,
+    privateVideoKey: media.privateVideoKey, privateThumbnailKey: media.privateThumbnailKey,
+    videoUrl: "", publicId: "", thumbnail: "", thumbnailPublicId: "", status: "inactive",
+    processingStatus: "ready", completedAt: new Date(), workerId: null, lockedUntil: null,
   };
+  const retirement = { publicDeletionKeys: { $each: [job.publicId, job.thumbnailPublicId].filter(Boolean) } };
   const aiWrite = await Video.updateOne({
     ...leaseFilter(job), decisionVersion: job.decisionVersion,
     moderationSource: { $ne: "admin" },
@@ -44,12 +48,12 @@ export async function applyAiResult(job, ai, media) {
     ...mediaFields,
     moderationStatus: ai.finalStatus, moderationSource: "ai",
     aiFeedback: ai.aiData?.reasoning || "", aiConfidence: ai.aiData?.confidenceScore || 0,
-  } }, { runValidators: true });
+  }, $addToSet: retirement }, { runValidators: true });
   if (!aiWrite.matchedCount) {
     // An admin override keeps its decision while this lease can still finish media.
     const mediaWrite = await Video.updateOne({ ...leaseFilter(job), $or: [
       { moderationSource: "admin" }, { decisionVersion: { $ne: job.decisionVersion } },
-    ] }, { $set: mediaFields }, { runValidators: true });
+    ] }, { $set: mediaFields, $addToSet: retirement }, { runValidators: true });
     if (!mediaWrite.matchedCount) return false;
   }
   // Maintenance reconciles publication if the process exits after the commit.
@@ -64,34 +68,31 @@ export async function processVideoJob(job) {
   const input = path.join(directory, `input${job.originalExt}`);
   let compressed;
   let retained = false;
-  const videoKey = `talkmart/videos/${job._id}/${job.workerId}.mp4`;
-  const thumbKey = `talkmart/thumbnails/${job._id}/${job.workerId}.webp`;
+  const videoKey = `talkmart/private/videos/${job._id}/${job.workerId}.mp4`;
+  const thumbKey = `talkmart/private/thumbnails/${job._id}/${job.workerId}.webp`;
   const beat = setInterval(() => {
     Video.updateOne(leaseFilter(job), { $set: { lockedUntil: new Date(Date.now() + LEASE_MS), lastHeartbeatAt: new Date() } })
       .catch((err) => logger.error("video_heartbeat_failed", err));
   }, 30000);
   try {
     // Record intended object names before writing storage, including crash recovery.
-    const registered = await Video.updateOne(leaseFilter(job), { $addToSet: { mediaKeys: { $each: [videoKey, thumbKey] } } });
+    const registered = await Video.updateOne(leaseFilter(job), { $addToSet: { mediaKeys: { $each: [videoKey, thumbKey, job.publicId, job.thumbnailPublicId].filter(Boolean) } } });
     if (!registered.matchedCount) return;
     let t = Date.now();
     await downloadFromR2(job.stagingKey, input);
     observe("r2_download_ms", Date.now() - t);
     await validateUploadedVideo(input);
-    t = Date.now();
-    const ai = await validateVideoContentAI({ tempFilePath: input, categoryName: job.categoryName, duration: job.duration });
-    observe("ai_ms", Date.now() - t);
     // Retain media for manual review and admin overrides, including AI rejection.
-    t = Date.now();
-    compressed = await compressVideo(input, job.originalExt);
-    observe("ffmpeg_ms", Date.now() - t);
+    const prepared = await prepareVideoMedia({ input, originalExt: job.originalExt, categoryName: job.categoryName, duration: job.duration });
+    const ai = prepared.ai;
+    compressed = prepared.compressed;
     if (!await Video.exists(leaseFilter(job))) return;
     t = Date.now();
-    const video = await uploadFileToR2(compressed.outputPath, "talkmart/videos", "video/mp4", ".mp4", videoKey);
+    await uploadFileToR2(compressed.outputPath, "talkmart/private/videos", "video/mp4", ".mp4", videoKey);
     const thumb = await generateThumbnail(input, job.originalExt);
-    const thumbnail = await uploadToR2(thumb.buffer, "talkmart/thumbnails", thumb.mimetype, thumb.ext, thumbKey);
+    await uploadToR2(thumb.buffer, "talkmart/private/thumbnails", thumb.mimetype, thumb.ext, thumbKey);
     observe("r2_upload_ms", Date.now() - t);
-    retained = await applyAiResult(job, ai, { videoUrl: video.url, publicId: video.key, thumbnail: thumbnail.url, thumbnailPublicId: thumbnail.key });
+    retained = await applyAiResult(job, ai, { privateVideoKey: videoKey, privateThumbnailKey: thumbKey });
     if (retained) {
       // On failure the reference remains, so maintenance retries staging deletion.
       await deleteFromR2(job.stagingKey);
@@ -110,7 +111,7 @@ export async function processVideoJob(job) {
     if (!retained) {
       // A timed-out DB response may still have committed. Never delete its media.
       try {
-        const referenced = await Video.exists({ _id: job._id, $or: [{ publicId: videoKey }, { thumbnailPublicId: thumbKey }] });
+        const referenced = await Video.exists({ _id: job._id, $or: [{ privateVideoKey: videoKey }, { privateThumbnailKey: thumbKey }] });
         if (!referenced) await Promise.allSettled([deleteFromR2(videoKey), deleteFromR2(thumbKey)]);
       } catch (err) { logger.warn("media_compensation_deferred", err); }
     }

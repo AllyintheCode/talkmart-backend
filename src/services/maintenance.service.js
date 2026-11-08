@@ -9,7 +9,7 @@ import Video from "../models/Video.js";
 import { VideoLike, VideoSave } from "../models/VideoInteraction.js";
 import { cleanupVideoResources } from "./videoCleanup.service.js";
 import { cleanupDeletedAccount } from "./accountCleanup.service.js";
-import { deleteFromR2 } from "./r2Upload.service.js";
+import { deleteFromR2, bucketFor } from "./r2Upload.service.js";
 import { recoverStuckVideos } from "./videoProcessing.service.js";
 import { observe } from "../utils/metrics.js";
 import { logger } from "../utils/logger.js";
@@ -17,6 +17,7 @@ import { publishIfEligible } from "./videoState.service.js";
 
 const cursors = new Map();
 let lastVideoId;
+let lastMediaVideoId;
 export async function reconcileCounters() {
   const videos = await Video.find({ ...(lastVideoId ? { _id: { $gt: lastVideoId } } : {}), status: { $ne: "deleting" } }).sort({ _id: 1 }).limit(25).select("_id");
   if (!videos.length) lastVideoId = null;
@@ -33,8 +34,8 @@ export async function reconcileCounters() {
   }
 }
 export async function reconcileOrphanObjects() {
-  for (const prefix of ["talkmart/staging/", "talkmart/videos/", "talkmart/thumbnails/"]) {
-    const bucket = prefix.includes("staging") ? process.env.R2_STAGING_BUCKET : process.env.R2_BUCKET;
+  for (const prefix of ["talkmart/staging/", "talkmart/private/videos/", "talkmart/private/thumbnails/", "talkmart/videos/", "talkmart/thumbnails/"]) {
+    const bucket = bucketFor(prefix);
     const result = await r2.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, MaxKeys: 100, ContinuationToken: cursors.get(prefix) }));
     cursors.set(prefix, result.NextContinuationToken);
     for (const object of result.Contents || []) {
@@ -48,6 +49,7 @@ export async function reconcileOrphanObjects() {
       const referenced = await Video.exists({ $or: [
         { publicId: object.Key }, { thumbnailPublicId: object.Key },
         { stagingKey: object.Key }, { mediaKeys: object.Key },
+        { privateVideoKey: object.Key }, { privateThumbnailKey: object.Key },
         { thumbnail: { $in: legacyUrls } }, { videoUrl: { $in: legacyUrls } },
       ] });
       if (!referenced) { await deleteFromR2(object.Key); observe("orphan_objects_removed", 1); }
@@ -73,17 +75,27 @@ export async function runMaintenance() {
   for (const video of await Video.find({ status: "deleting" }).limit(25)) {
     try { await cleanupVideoResources(video); } catch (err) { logger.warn("video_cleanup_retry", err); }
   }
-  for (const video of await Video.find({ processingStatus: { $in: ["ready", "failed"] }, $or: [{ stagingKey: { $ne: "" }, processingStatus: "ready" }, { $expr: { $gt: [{ $size: { $setDifference: [{ $ifNull: ["$mediaKeys", []] }, ["$publicId", "$thumbnailPublicId"]] } }, 0] } }] }).limit(25)) {
+  for (const video of await Video.find({ processingStatus: { $in: ["ready", "failed"] }, $and: [
+    { $or: [{ mediaPublicationId: null }, { mediaPublicationUntil: { $lte: new Date() } }] },
+    { $or: [{ stagingKey: { $ne: "" }, processingStatus: "ready" }, { $expr: { $gt: [{ $size: { $setDifference: [{ $ifNull: ["$mediaKeys", []] }, ["$publicId", "$thumbnailPublicId", "$privateVideoKey", "$privateThumbnailKey"]] } }, 0] } }] },
+  ] }).limit(25)) {
     try {
-      const unused = (video.mediaKeys || []).filter((key) => key !== video.publicId && key !== video.thumbnailPublicId);
+      const retainedKeys = [video.publicId, video.thumbnailPublicId, video.privateVideoKey, video.privateThumbnailKey];
+      const unused = (video.mediaKeys || []).filter(key => !retainedKeys.includes(key));
       for (const key of unused) await deleteFromR2(key);
       if (video.processingStatus === "ready" && video.stagingKey) await deleteFromR2(video.stagingKey);
       await Video.updateOne({ _id: video._id, processingStatus: video.processingStatus }, { $pull: { mediaKeys: { $in: unused } }, ...(video.processingStatus === "ready" ? { $set: { stagingKey: "" } } : {}) });
     } catch (err) { logger.warn("media_cleanup_retry", err); }
   }
-  // Completes the crash window between durable result commit and publication.
-  for (const video of await Video.find({ processingStatus: "ready", moderationStatus: "approved", status: "inactive", visibility: "public" }).limit(25).select("_id")) {
-    await publishIfEligible(video._id);
+  const urgent = await Video.find({ processingStatus: "ready", status: { $ne: "deleting" }, $or: [
+    { moderationStatus: "approved", status: "inactive", visibility: "public" }, { mediaRevocationPending: true }, { "publicDeletionKeys.0": { $exists: true } },
+  ] }).limit(25).select("_id");
+  const scan = await Video.find({ processingStatus: "ready", status: { $ne: "deleting" }, ...(lastMediaVideoId ? { _id: { $gt: lastMediaVideoId } } : {}) })
+    .sort({ _id: 1 }).limit(25).select("_id");
+  lastMediaVideoId = scan.at(-1)?._id || null;
+  for (const video of [...new Map([...urgent, ...scan].map(item => [String(item._id), item])).values()]) {
+    try { await publishIfEligible(video._id); }
+    catch (error) { logger.warn("video_media_reconciliation_retry", { videoId: video._id }, error); }
   }
   await reconcileCounters();
 }

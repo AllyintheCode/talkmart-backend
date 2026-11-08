@@ -1,4 +1,5 @@
-import { PutObjectCommand, DeleteObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
+import { PutObjectCommand, DeleteObjectCommand, GetObjectCommand, CopyObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { Upload } from "@aws-sdk/lib-storage";
 import r2 from "../config/r2.js";
 import crypto from "crypto";
@@ -7,7 +8,9 @@ import { pipeline } from "stream/promises";
 
 const BUCKET = process.env.R2_BUCKET;
 const PUBLIC_URL = process.env.R2_PUBLIC_URL;
-const bucketFor = (key) => key.startsWith("talkmart/staging/") ? process.env.R2_STAGING_BUCKET : BUCKET;
+export const isPrivateMediaKey = key => typeof key === "string" && key.startsWith("talkmart/private/");
+export const bucketFor = key => key.startsWith("talkmart/staging/") || isPrivateMediaKey(key) ? process.env.R2_STAGING_BUCKET : BUCKET;
+export const publicMediaUrl = key => `${PUBLIC_URL.replace(/\/+$/, "")}/${key}`;
 
 
 export const uploadToR2 = async (buffer, folder, mimetype, ext = "", keyOverride = "") => {
@@ -16,7 +19,7 @@ export const uploadToR2 = async (buffer, folder, mimetype, ext = "", keyOverride
 
   await r2.send(
     new PutObjectCommand({
-      Bucket: BUCKET,
+      Bucket: bucketFor(key),
       Key: key,
       Body: buffer,
       ContentType: mimetype,
@@ -24,7 +27,7 @@ export const uploadToR2 = async (buffer, folder, mimetype, ext = "", keyOverride
     { abortSignal: AbortSignal.timeout(120000) },
   );
 
-  const url = `${PUBLIC_URL}/${key}`;
+  const url = bucketFor(key) === BUCKET ? publicMediaUrl(key) : "";
   return { key, url };
 };
 
@@ -48,7 +51,7 @@ export const uploadFileToR2 = async (filePath, folder, mimetype, ext = "", keyOv
 
   const timeout = setTimeout(() => { upload.abort(); stream.destroy(new Error("R2_UPLOAD_TIMEOUT")); }, 120000);
   try { await upload.done(); } finally { clearTimeout(timeout); stream.destroy(); }
-  const url = key.startsWith("talkmart/staging/") ? "" : `${PUBLIC_URL}/${key}`;
+  const url = bucketFor(key) === BUCKET ? publicMediaUrl(key) : "";
   return { key, url };
 };
 
@@ -82,3 +85,16 @@ export const deleteFromR2 = async (key) => {
     { abortSignal: AbortSignal.timeout(120000) },
   );
 };
+
+export async function copyMediaObject(sourceKey, key, contentType) {
+  const source = [bucketFor(sourceKey), ...sourceKey.split("/")].map(encodeURIComponent).join("/");
+  await r2.send(new CopyObjectCommand({ Bucket: bucketFor(key), Key: key, CopySource: source,
+    ContentType: contentType, MetadataDirective: "REPLACE",
+    CacheControl: isPrivateMediaKey(key) ? "private, no-store" : "public, max-age=60, must-revalidate" }),
+  { abortSignal: AbortSignal.timeout(120000) });
+}
+
+export async function privatePreviewUrl(key) {
+  if (!isPrivateMediaKey(key)) throw new Error("INVALID_PRIVATE_PREVIEW_KEY");
+  return getSignedUrl(r2, new GetObjectCommand({ Bucket: bucketFor(key), Key: key, ResponseCacheControl: "private, no-store" }), { expiresIn: 600 });
+}

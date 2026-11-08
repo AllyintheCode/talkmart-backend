@@ -46,6 +46,8 @@ test("OTP generation and HMAC are purpose and account scoped, with no legacy SHA
 test("structured logger redacts credentials, authorization, email and OTP in errors", () => {
   const result = JSON.stringify(redact({ nested: { password: "supersecret", authorization: "Bearer test" }, err: new Error(`smtp user@example.test 123456 ${process.env.JWT_SECRET}`) }));
   for (const secret of ["supersecret", "Bearer test", "user@example.test", "123456", process.env.JWT_SECRET]) assert.ok(!result.includes(secret));
+  const signed = "https://private.storage.invalid/video.mp4?X-Amz-Credential=private-access&X-Amz-Signature=private-signature";
+  assert.equal(redact("preview: " + signed), "preview: [REDACTED_MEDIA_URL]");
 });
 test("pagination rejects negative, huge, fractional and long search inputs", () => {
   for (const query of [{ page: -1 }, { limit: 999999 }, { limit: 1.2 }, { page: 10000, limit: 50 }, { search: "a".repeat(101) }]) assert.throws(() => parsePagination(query));

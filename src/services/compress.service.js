@@ -6,6 +6,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import os from "os";
+import { validateUploadedVideo } from "./mediaProbe.service.js";
 
 // ffmpeg yolunu təyin et
 ffmpeg.setFfmpegPath(ffmpegStatic);
@@ -42,15 +43,12 @@ export const compressImage = async (buffer) => {
 // ============================
 
 /**
- * Videonu sıxışdırır — keyfiyyəti qoruyaraq ölçünü kiçildir
- * - H.264 codec, CRF 23 (vizual fərq hiss olunmur)
- * - AAC audio 128kbps
- * - Orijinal resolution qorunur
- * - Ortalama 40-60% ölçü azalması
+ * Uyğun MP4/H.264 axınını dəyişmədən remux edir; digər girişləri H.264/AAC-a çevirir.
+ * Orijinal resolution saxlanılır. Ölçünün azalması fayldan asılıdır.
  *
  * @param {Buffer} buffer - Orijinal video buffer-i
  * @param {string} originalExt - Orijinal fayl uzantısı (.mp4, .mov, vs.)
- * @returns {{ buffer: Buffer, ext: string, mimetype: string }}
+ * @returns {{ outputPath: string, processingMode: string, cleanup: Function }}
  */
 export const compressVideo = async (input, originalExt = ".mp4") => {
   const tmpId = crypto.randomUUID();
@@ -69,21 +67,22 @@ export const compressVideo = async (input, originalExt = ".mp4") => {
   const outputPath = path.join(tmpDir, `output_${tmpId}.mp4`);
 
   try {
+    const metadata = await validateUploadedVideo(inputPath);
+    const mode = canRemuxVideo(metadata, fs.statSync(inputPath).size) ? "remux" : "transcode";
     await new Promise((resolve, reject) => {
       const command = ffmpeg(inputPath)
-        .inputOptions(["-protocol_whitelist file,pipe"])
-        .videoCodec("libx264")
-        .outputOptions([
+        .inputOptions(["-protocol_whitelist file,pipe", "-threads 2"])
+        .outputOptions([`-map 0:${metadata.videoStreamIndex}`,
+          ...(metadata.audioStreamIndex !== null ? [`-map 0:${metadata.audioStreamIndex}`] : []),
+          "-map_metadata -1", "-map_chapters -1", "-movflags +faststart", "-fs 200M"]);
+      if (mode === "remux") command.videoCodec("copy").audioCodec("copy");
+      else command.videoCodec("libx264").outputOptions([
           "-threads 2",
           "-crf 23",
           "-preset fast",
-          "-movflags +faststart",
           "-pix_fmt yuv420p",
-          "-fs 200M",
-        ])
-        .audioCodec("aac")
-        .audioBitrate("128k")
-        .format("mp4")
+        ]).audioCodec("aac").audioBitrate("128k");
+      command.format("mp4")
         .on("end", resolve)
         .on("error", reject)
         .save(outputPath);
@@ -97,8 +96,11 @@ export const compressVideo = async (input, originalExt = ".mp4") => {
     });
 
     if (fs.statSync(outputPath).size >= 200 * 1000 * 1000) throw new Error("VIDEO_OUTPUT_TOO_LARGE");
+    const result = await validateUploadedVideo(outputPath);
+    if (result.durationSeconds + 0.25 < metadata.durationSeconds) throw new Error("VIDEO_OUTPUT_TRUNCATED");
     return {
       outputPath,
+      processingMode: mode,
       ext: ".mp4",
       mimetype: "video/mp4",
       cleanup: () => {
@@ -114,6 +116,15 @@ export const compressVideo = async (input, originalExt = ".mp4") => {
     }
   }
 };
+
+export function canRemuxVideo(metadata, bytes) {
+  return Boolean(metadata.codec === "h264" && metadata.formatName?.includes("mp4") &&
+    metadata.pixelFormat === "yuv420p" && ["Baseline", "Constrained Baseline", "Main", "High"].includes(metadata.profile) &&
+    metadata.level > 0 && metadata.level <= 52 && metadata.rotation % 360 === 0 &&
+    metadata.frameRate && metadata.frameRate <= 30 && metadata.nominalFrameRate && metadata.nominalFrameRate <= 30 &&
+    metadata.bitRate > 0 && metadata.bitRate <= 12000000 && bytes > 0 && bytes < 195000000 && metadata.streamCount <= 2 &&
+    ((!metadata.audioCodec && metadata.audioStreamIndex === null) || (metadata.audioCodec === "aac" && metadata.audioChannels > 0 && metadata.audioChannels <= 2)));
+}
 
 /**
  * Videodan thumbnail yaradır

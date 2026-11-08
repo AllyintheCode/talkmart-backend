@@ -31,11 +31,15 @@ import { runMaintenance, reconcileOrphanObjects } from "../../src/services/maint
 import { deliverNextReportNotification } from "../../src/services/reportNotification.service.js";
 import { SharedRateStore } from "../../src/middlewares/rateLimit.middleware.js";
 import { createVideo } from "../../src/controllers/video.controller.js";
+import { publishIfEligible, setAdminDecision } from "../../src/services/videoState.service.js";
+import { videoForViewer } from "../../src/services/videoMedia.service.js";
 
 let repl, server, base, directory, input, inputBytes;
 let admin, provider, user, category;
 let smtpFails = false;
 let storageFails = false;
+let copyHook = null;
+let deleteHook = null;
 const objects = new Map();
 const approved = { finalStatus: "approved", aiData: { reasoning: "Valid service", confidenceScore: 95 } };
 const token = (u) => signAccessToken({ id: u._id, sv: u.sessionVersion });
@@ -48,8 +52,19 @@ async function request(url, { method = "GET", body, auth, cookie, idempotencyKey
   const response = await fetch(base + url, { method, headers, body: body instanceof FormData ? body : body ? JSON.stringify(body) : undefined, redirect: "manual" });
   return { status: response.status, body: await response.json(), headers: response.headers };
 }
-const seedVideo = (fields = {}) => Video.create({ providerId: provider._id, categoryId: category._id, categoryName: category.name, description: "Cleaning service", price: 10,
-  videoUrl: "https://media.invalid/example.mp4", publicId: "talkmart/videos/example.mp4", processingStatus: "ready", moderationStatus: "approved", status: "active", ...fields });
+const seedVideo = async (fields = {}) => {
+  const id = new mongoose.Types.ObjectId();
+  const video = await Video.create({ _id: id, providerId: provider._id, categoryId: category._id, categoryName: category.name, description: "Cleaning service", price: 10,
+    videoUrl: `https://media.invalid/talkmart/videos/${id}.mp4`, publicId: `talkmart/videos/${id}.mp4`, processingStatus: "ready", moderationStatus: "approved", status: "active", ...fields });
+  if (video.publicId) objects.set(`test-public:${video.publicId}`, inputBytes);
+  return video;
+};
+const privateMedia = (id, suffix = crypto.randomUUID()) => {
+  const media = { privateVideoKey: `talkmart/private/videos/${id}/${suffix}.mp4`, privateThumbnailKey: `talkmart/private/thumbnails/${id}/${suffix}.webp` };
+  objects.set(`test-private:${media.privateVideoKey}`, inputBytes);
+  objects.set(`test-private:${media.privateThumbnailKey}`, Buffer.from("thumbnail"));
+  return media;
+};
 
 before(async () => {
   repl = await MongoMemoryReplSet.create({ replSet: { count: 1 }, binary: { downloadDir: path.resolve("node_modules/.cache/mongodb-memory-server") } });
@@ -66,7 +81,16 @@ before(async () => {
       objects.set(key, Buffer.concat(chunks));
       return { ETag: "test", $metadata: { httpStatusCode: 200 } };
     }
-    if (command.constructor.name === "DeleteObjectCommand") { objects.delete(key); return {}; }
+    if (command.constructor.name === "DeleteObjectCommand") { if (deleteHook) await deleteHook(command); objects.delete(key); return {}; }
+    if (command.constructor.name === "CopyObjectCommand") {
+      const source = decodeURIComponent(command.input.CopySource).replace(/^\/+/, "");
+      const slash = source.indexOf("/");
+      const stored = objects.get(source.slice(0, slash) + ":" + source.slice(slash + 1));
+      if (!stored) throw Object.assign(new Error("NoSuchKey"), { code: "NoSuchKey" });
+      objects.set(key, Buffer.from(stored));
+      if (copyHook) await copyHook(command);
+      return { CopyObjectResult: { ETag: "test" } };
+    }
     if (command.constructor.name === "GetObjectCommand") {
       if (!objects.has(key)) throw new Error("NoSuchKey");
       return { Body: Readable.from(objects.get(key)) };
@@ -84,7 +108,7 @@ before(async () => {
 });
 beforeEach(async () => {
   await Promise.all(Object.values(mongoose.connection.collections).map((collection) => collection.deleteMany({})));
-  objects.clear(); smtpFails = false; storageFails = false;
+  objects.clear(); smtpFails = false; storageFails = false; copyHook = null; deleteHook = null;
   const password = await bcrypt.hash("oldPassword1", 4);
   [admin, provider, user] = await User.create([
     { fullName: "Admin", role: "admin", email: "admin@example.test", phone: "1000000001", password, emailVerified: true },
@@ -141,16 +165,17 @@ test("lease ownership fences duplicate jobs, active workers and stale results af
   await Video.updateOne({ _id: video._id }, { $set: { lockedUntil: new Date(Date.now() - 1000) } });
   const next = await acquireLease(video._id);
   assert.notEqual(next.workerId, old.workerId);
-  assert.equal(await applyAiResult(old, approved, { videoUrl: "stale", publicId: "stale" }), false);
-  assert.equal(await applyAiResult(next, approved, { videoUrl: "ready", publicId: "ready" }), true);
-  assert.equal(await applyAiResult(next, approved, { videoUrl: "duplicate" }), false);
+  const media = privateMedia(video._id);
+  assert.equal(await applyAiResult(old, approved, media), false);
+  assert.equal(await applyAiResult(next, approved, media), true);
+  assert.equal(await applyAiResult(next, approved, media), false);
 });
 test("late AI cannot overwrite admin rejection or hidden visibility; unreadied videos cannot be activated", async () => {
   const video = await seedVideo({ processingStatus: "queued", status: "inactive", moderationStatus: "pending", stagingKey: "talkmart/staging/source.mp4", videoUrl: "" });
   assert.equal((await request(`/api/admin/videos/${video._id}/status`, { method: "PATCH", auth: token(admin), body: { status: "active" } })).status, 409);
   const job = await acquireLease(video._id);
   await request(`/api/admin/videos/${video._id}/moderate`, { method: "PATCH", auth: token(admin), body: { action: "reject", feedback: "Rejected" } });
-  await applyAiResult(job, approved, { videoUrl: "https://media.invalid/a.mp4", publicId: "a" });
+  await applyAiResult(job, approved, privateMedia(video._id));
   let final = await Video.findById(video._id);
   assert.equal(final.moderationSource, "admin"); assert.equal(final.moderationStatus, "rejected"); assert.equal(final.status, "inactive");
   await request(`/api/admin/videos/${video._id}/moderate`, { method: "PATCH", auth: token(admin), body: { action: "approve" } });
@@ -204,6 +229,70 @@ test("provider verification workflow gates uploads, and unfinished uploads alway
     assert.equal(code, 400); await assert.rejects(fs.stat(temporary));
   }
 });
+
+test("explore keeps exact totals, ordering, filters, cursor and personal flags on the bounded owner path", async () => {
+  await User.updateOne({ _id: provider._id }, { $set: { "providerProfile.address": "Baku [A]." } });
+  const other = await User.create({ fullName: "Other provider", role: "provider", email: "other@example.test", phone: "other", password: "unused",
+    emailVerified: true, providerProfile: { verified: true, address: "Baku A0" } });
+  const rows = [];
+  for (let index = 0; index < 18; index++) rows.push(await seedVideo({ providerId: index % 2 ? other._id : provider._id,
+    title: "Cleaning " + index, price: index % 4, viewCount: index, createdAt: new Date(Date.UTC(2026, 0, 1) + index * 1000),
+    ...(index === 4 ? { moderationStatus: "rejected" } : {}), ...(index === 5 ? { visibility: "hidden" } : {}),
+    ...(index === 6 ? { processingStatus: "processing" } : {}) }));
+  await Video.collection.insertOne({ ...rows[0].toObject(), _id: new mongoose.Types.ObjectId(), providerId: String(provider._id) });
+  await Video.collection.insertOne({ ...rows[0].toObject(), _id: new mongoose.Types.ObjectId(), providerId: new mongoose.Types.ObjectId() });
+  const eligible = rows.filter(row => row.moderationStatus === "approved" && row.visibility !== "hidden" && row.processingStatus === "ready");
+  const newest = (a, b) => b.createdAt - a.createdAt || String(b._id).localeCompare(String(a._id));
+  const ids = list => list.map(row => String(row._id));
+  for (const [sort, compare] of [["newest", newest], ["price_low", (a, b) => a.price - b.price || String(b._id).localeCompare(String(a._id))],
+    ["price_high", (a, b) => b.price - a.price || String(b._id).localeCompare(String(a._id))], ["trending", (a, b) => b.viewCount - a.viewCount]]) {
+    const response = await request(`/api/videos/explore?limit=3&page=2&sort=${sort}`);
+    assert.equal(response.status, 200); assert.equal(response.body.total, eligible.length);
+    assert.deepEqual(ids(response.body.videos), ids([...eligible].sort(compare).slice(3, 6)));
+    if (sort !== "newest") assert.equal(response.body.nextCursor, null);
+  }
+  const filtered = await request("/api/videos/explore?limit=50&location=" + encodeURIComponent("[A].") + "&minPrice=1&maxPrice=3&search=cleaning&categoryId=" + category._id);
+  const expected = eligible.filter(row => String(row.providerId) === String(provider._id) && row.price >= 1 && row.price <= 3).sort(newest);
+  assert.equal(filtered.body.total, expected.length); assert.deepEqual(ids(filtered.body.videos), ids(expected));
+  const first = await request("/api/videos/explore?limit=3");
+  const second = await request("/api/videos/explore?limit=3&cursor=" + first.body.nextCursor);
+  assert.deepEqual(ids(second.body.videos), ids([...eligible].sort(newest).slice(3, 6)));
+  assert.equal(second.body.total, eligible.length - 3);
+  await User.updateOne({ _id: user._id }, { $set: { blockedUsers: [other._id] } });
+  await VideoLike.create({ userId: user._id, videoId: rows[16]._id });
+  const personal = await request("/api/videos/explore?limit=50", { auth: token(user) });
+  const permitted = eligible.filter(row => String(row.providerId) === String(provider._id)).sort(newest);
+  assert.deepEqual(ids(personal.body.videos), ids(permitted)); assert.equal(personal.body.total, permitted.length);
+  assert.equal(personal.body.videos.find(row => row._id === String(rows[16]._id)).isLiked, true);
+  assert.equal(personal.body.videos[0].provider.phone, undefined);
+});
+
+test("explore rechecks an owner blocked after counting and bounds its fallback above 1000 owners", async () => {
+  await seedVideo();
+  const original = Video.aggregate.bind(Video);
+  let injected = false;
+  const mocked = mock.method(Video, "aggregate", (...args) => {
+    const aggregate = original(...args);
+    if (!args[0].some(stage => stage.$group) && !injected) {
+      injected = true;
+      const execute = aggregate.exec.bind(aggregate);
+      aggregate.exec = async () => { await User.updateOne({ _id: provider._id }, { $set: { isBlocked: true } }); return execute(); };
+    }
+    return aggregate;
+  });
+  try { assert.equal((await request("/api/videos/explore")).body.videos.length, 0); }
+  finally { mocked.mock.restore(); }
+  const owners = Array.from({ length: 1001 }, (_, index) => ({ _id: new mongoose.Types.ObjectId(), fullName: "Owner " + index,
+    email: `owner${index}@example.test`, phone: "owner-" + index, password: "unused", role: "provider", emailVerified: true, isBlocked: index === 0 }));
+  await User.collection.insertMany(owners);
+  const videos = owners.map((owner, index) => ({ _id: new mongoose.Types.ObjectId(), providerId: owner._id, categoryId: category._id, title: "Fallback",
+    description: "Fallback", price: 1, videoUrl: "https://media.invalid/fallback.mp4", status: "active", processingStatus: "ready", moderationStatus: "approved",
+    visibility: "public", createdAt: new Date(Date.UTC(2026, 0, 1) + index * 1000) }));
+  await Video.collection.insertMany(videos);
+  const response = await request("/api/videos/explore?limit=5");
+  assert.equal(response.status, 200); assert.equal(response.body.total, 1000);
+  assert.deepEqual(response.body.videos.map(row => row._id), videos.slice(-5).reverse().map(row => String(row._id)));
+});
 test("upload persists private staging and a worker completes media without an API process queue", async () => {
   const form = new FormData();
   form.set("categoryId", String(category._id)); form.set("description", "Cleaning"); form.set("price", "12");
@@ -217,7 +306,16 @@ test("upload persists private staging and a worker completes media without an AP
   await processVideoJob(job);
   const final = await Video.findById(stored._id);
   assert.equal(final.processingStatus, "ready"); assert.equal(final.moderationStatus, "review"); assert.equal(final.status, "inactive");
-  assert.ok(final.videoUrl); assert.equal(final.stagingKey, "");
+  assert.equal(final.videoUrl, ""); assert.equal(final.stagingKey, "");
+  assert.ok(objects.has(`test-private:${final.privateVideoKey}`));
+  assert.ok(objects.has(`test-private:${final.privateThumbnailKey}`));
+  assert.equal([...objects.keys()].some(key => key.startsWith("test-public:")), false);
+  const preview = await request("/api/videos/my-videos", { auth: token(provider) });
+  assert.equal(preview.headers.get("cache-control"), "private, no-store");
+  const link = new URL(preview.body.videos[0].videoUrl);
+  assert.ok(link.pathname.startsWith("/test-private/") || link.hostname.startsWith("test-private."));
+  assert.equal(link.searchParams.get("X-Amz-Expires"), "600");
+  await assert.rejects(videoForViewer(final, user), /PRIVATE_MEDIA_FORBIDDEN/);
 });
 test("deletion remains queued during storage outage, then removes media and dependent records", async () => {
   const video = await seedVideo();
@@ -228,6 +326,118 @@ test("deletion remains queued during storage outage, then removes media and depe
   await runMaintenance(); assert.equal((await Video.findById(video._id)).status, "deleting");
   storageFails = false; await runMaintenance();
   assert.equal(await Video.findById(video._id), null); assert.equal(await VideoLike.countDocuments(), 0); assert.equal(objects.size, 0);
+});
+
+test("private media only becomes public on approval; reject/hide revoke origin objects and previews remain scoped", async () => {
+  const id = new mongoose.Types.ObjectId(), media = privateMedia(id);
+  const video = await seedVideo({ _id: id, ...media, videoUrl: "", publicId: "", moderationStatus: "review", status: "inactive" });
+  assert.equal((await request(`/api/videos/${id}/public`)).status, 404);
+  assert.equal([...objects.keys()].some(key => key.startsWith("test-public:")), false);
+  let response = await request(`/api/admin/videos/${id}/moderate`, { method: "PATCH", auth: token(admin), body: { action: "approve" } });
+  assert.equal(response.status, 200); assert.equal(response.body.video.status, "active");
+  let current = await Video.findById(id), previous = current.publicId;
+  assert.ok(objects.has(`test-public:${previous}`));
+  assert.ok(objects.has(`test-private:${media.privateVideoKey}`));
+  await request(`/api/admin/videos/${id}/moderate`, { method: "PATCH", auth: token(admin), body: { action: "reject" } });
+  current = await Video.findById(id);
+  assert.equal(current.publicId, ""); assert.equal(current.videoUrl, "");
+  assert.equal(objects.has(`test-public:${previous}`), false);
+  assert.equal((await request(`/api/videos/${id}/public`)).status, 404);
+  await request(`/api/admin/videos/${id}/moderate`, { method: "PATCH", auth: token(admin), body: { action: "approve" } });
+  current = await Video.findById(id); assert.notEqual(current.publicId, previous);
+  previous = current.publicId;
+  await request(`/api/admin/videos/${id}/status`, { method: "PATCH", auth: token(admin), body: { status: "inactive" } });
+  assert.equal(objects.has(`test-public:${previous}`), false);
+  await runMaintenance();
+  assert.equal((await Video.findById(id)).visibility, "hidden");
+  response = await request(`/api/admin/videos/${id}/status`, { method: "PATCH", auth: token(admin), body: { status: "active" } });
+  assert.equal(response.body.video.status, "active");
+  assert.ok((await videoForViewer(video, provider)).videoUrl.includes("X-Amz-Signature"));
+});
+
+test("admin rejection during publication fences the result and removes the attempted public copy", async () => {
+  const id = new mongoose.Types.ObjectId();
+  await seedVideo({ _id: id, ...privateMedia(id), videoUrl: "", publicId: "", status: "inactive" });
+  let injected = false;
+  copyHook = async command => {
+    if (!injected && command.input.Bucket === "test-public") {
+      injected = true;
+      await setAdminDecision(id, "reject", admin._id, "Concurrent rejection");
+    }
+  };
+  await publishIfEligible(id);
+  const current = await Video.findById(id);
+  assert.equal(current.moderationStatus, "rejected"); assert.equal(current.status, "inactive");
+  assert.equal(current.videoUrl, "");
+  assert.equal([...objects.keys()].some(key => key.startsWith("test-public:")), false);
+});
+
+test("failed publication compensates copies; an ambiguous successful commit preserves referenced media", async () => {
+  const id = new mongoose.Types.ObjectId();
+  await seedVideo({ _id: id, ...privateMedia(id), videoUrl: "", publicId: "", status: "inactive" });
+  copyHook = async () => { throw new Error("Lost copy response"); };
+  await assert.rejects(publishIfEligible(id));
+  assert.equal([...objects.keys()].some(key => key.startsWith("test-public:")), false);
+  assert.equal((await Video.findById(id)).status, "inactive");
+  copyHook = null;
+  const original = Video.findOneAndUpdate.bind(Video);
+  let injected = false;
+  const mocked = mock.method(Video, "findOneAndUpdate", async (filter, update, options) => {
+    const result = await original(filter, update, options);
+    if (!injected && update.$set?.publicId && update.$set?.status === "active") { injected = true; throw new Error("Lost publish commit response"); }
+    return result;
+  });
+  try { await assert.rejects(publishIfEligible(id)); } finally { mocked.mock.restore(); }
+  const current = await Video.findById(id);
+  assert.equal(current.status, "active");
+  assert.ok(objects.has(`test-public:${current.publicId}`));
+  assert.ok(objects.has(`test-public:${current.thumbnailPublicId}`));
+});
+
+test("legacy rejection retries private quarantine after a storage outage; private references survive orphan cleanup", async () => {
+  const video = await seedVideo(), oldKey = video.publicId;
+  storageFails = true;
+  assert.equal((await request(`/api/admin/videos/${video._id}/moderate`, { method: "PATCH", auth: token(admin), body: { action: "reject" } })).status, 200);
+  assert.equal((await request(`/api/videos/${video._id}/public`)).status, 404);
+  assert.equal((await Video.findById(video._id)).mediaRevocationPending, true);
+  storageFails = false;
+  await runMaintenance();
+  const current = await Video.findById(video._id);
+  assert.ok(current.privateVideoKey); assert.equal(current.videoUrl, "");
+  assert.equal(objects.has(`test-public:${oldKey}`), false);
+  objects.set("test-private:talkmart/private/videos/unreferenced.mp4", inputBytes);
+  await reconcileOrphanObjects();
+  assert.ok(objects.has(`test-private:${current.privateVideoKey}`));
+  assert.equal(objects.has("test-private:talkmart/private/videos/unreferenced.mp4"), false);
+  await request(`/api/videos/${video._id}`, { method: "DELETE", auth: token(provider) });
+  await runMaintenance();
+  assert.equal(await Video.findById(video._id), null);
+  assert.equal(objects.has(`test-private:${current.privateVideoKey}`), false);
+});
+
+test("revocation survives a failed delete after unlinking public URLs, including missing legacy thumbnails", async () => {
+  const video = await seedVideo({ thumbnail: "https://media.invalid/talkmart/thumbnails/missing.webp", thumbnailPublicId: "talkmart/thumbnails/missing.webp" });
+  const oldKey = video.publicId;
+  deleteHook = async command => { if (command.input.Bucket === "test-public" && command.input.Key === oldKey) throw new Error("Delete unavailable"); };
+  await setAdminDecision(video._id, "reject", admin._id);
+  let current = await Video.findById(video._id);
+  assert.equal(current.videoUrl, ""); assert.equal(current.mediaRevocationPending, true);
+  assert.ok(current.publicDeletionKeys.includes(oldKey)); assert.ok(current.privateVideoKey);
+  assert.equal(current.privateThumbnailKey, "");
+  assert.ok(objects.has(`test-public:${oldKey}`));
+  const backlog = await request("/api/admin/operations", { auth: token(admin) });
+  assert.equal(backlog.status, 200); assert.equal(backlog.body.mediaRevocationBacklog, 1);
+  const preview = await videoForViewer(current, provider);
+  assert.ok(preview.videoUrl.includes("X-Amz-Signature"));
+  assert.equal("privateVideoKey" in preview, false); assert.equal("publicDeletionKeys" in preview, false);
+  deleteHook = null;
+  await runMaintenance();
+  current = await Video.findById(video._id);
+  assert.equal(current.mediaRevocationPending, false); assert.equal(current.publicDeletionKeys.length, 0);
+  assert.equal(objects.has(`test-public:${oldKey}`), false);
+  assert.equal((await request("/api/admin/operations", { auth: token(admin) })).body.mediaRevocationBacklog, 0);
+  await setAdminDecision(video._id, "approve", admin._id);
+  assert.equal((await Video.findById(video._id)).status, "active");
 });
 test("account deletion revokes immediately and cascades with report anonymization", async () => {
   const video = await seedVideo();
@@ -297,7 +507,7 @@ test("an ambiguous DB response after media commit cannot delete referenced outpu
   try { await processVideoJob(job); } finally { mocked.mock.restore(); }
   const final = await Video.findById(video._id);
   assert.equal(final.processingStatus, "ready");
-  assert.ok(objects.has(`test-public:${final.publicId}`));
+  assert.ok(objects.has(`test-private:${final.privateVideoKey}`));
 });
 test("cursor pages do not duplicate users and a daily quota rejects before accepting a file", async () => {
   const first = await request("/api/admin/users?limit=1", { auth: token(admin) });

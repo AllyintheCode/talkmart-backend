@@ -9,6 +9,9 @@
     "start": "node src/index.js",
     "test:integration": "node --test --test-concurrency=1 test/integration/*.test.js",
     "worker": "node src/worker.js",
+    "perf:api": "node scripts/perf/api.js",
+    "perf:media": "node scripts/perf/media.js",
+    "perf:worker": "node scripts/perf/worker.js",
     "lint": "node scripts/check-source.js",
     "build": "node scripts/check-source.js",
     "migrate:video-state": "node scripts/migrate-video-state.js"
@@ -20,6 +23,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1075.0",
     "@aws-sdk/lib-storage": "^3.1156.0",
+    "@aws-sdk/s3-request-presigner": "3.1156.0",
     "@google/generative-ai": "^0.24.1",
     "axios": "^1.13.5",
     "bcryptjs": "^3.0.3",

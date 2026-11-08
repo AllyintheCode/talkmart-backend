@@ -140,6 +140,12 @@ const VideoSchema = new mongoose.Schema(
     visibility: { type: String, enum: ["public", "hidden"], default: "public" },
     nextAttemptAt: { type: Date, default: Date.now },
     mediaKeys: { type: [String], default: [] },
+    privateVideoKey: { type: String, default: "" },
+    privateThumbnailKey: { type: String, default: "" },
+    mediaPublicationId: { type: String, default: null },
+    mediaPublicationUntil: { type: Date, default: null },
+    mediaRevocationPending: { type: Boolean, default: false },
+    publicDeletionKeys: { type: [String], default: [] },
     completedAt: { type: Date, default: null },
     schemaVersion: { type: Number, default: 2 },
 

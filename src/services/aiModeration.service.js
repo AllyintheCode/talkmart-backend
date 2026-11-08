@@ -56,9 +56,10 @@ export async function extractKeyframes(filePath, count = 4, duration = 5, { dead
     };
     const interval = duration / count;
     if (duration <= SINGLE_PASS_MAX_SECONDS) {
-      // Decode a short clip once instead of repeatedly decoding the same 4K GOP.
+      // Absolute sample positions avoid accumulating one-frame rounding errors
+      // until the fourth sample falls beyond a short/non-integer-FPS clip.
       await decode(interval / 2, path.join(directory, "%d.jpg"),
-        `select='isnan(prev_selected_t)+gte(t-prev_selected_t,${interval})',scale=640:-2`, count, FRAME_BUDGET_MS);
+        `select='gte(t,selected_n*${interval})',scale=640:-2`, count, FRAME_BUDGET_MS);
     } else {
       // Sparse seeks avoid decoding several minutes of a long upload.
       for (let i = 0; i < count; i++) {
@@ -115,11 +116,11 @@ export async function analyzeVideoWithAI(videoId) {
   const Video = (await import("../models/Video.js")).default;
   const Category = (await import("../models/Category.js")).default;
   const video = await Video.findOne({ _id: videoId, processingStatus: "ready", status: { $ne: "deleting" }, moderationSource: { $ne: "admin" } });
-  if (!video?.publicId) return;
+  if (!video?.privateVideoKey && !video?.publicId) return;
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), "talkmart-recheck-"));
   try {
     const input = path.join(directory, "input.mp4");
-    await downloadFromR2(video.publicId, input);
+    await downloadFromR2(video.privateVideoKey || video.publicId, input);
     const category = await Category.findById(video.categoryId);
     const result = await validateVideoContentAI({ tempFilePath: input, categoryName: category?.name || "", duration: video.duration });
     await Video.updateOne({ _id: videoId, decisionVersion: video.decisionVersion, moderationSource: { $ne: "admin" }, status: { $ne: "deleting" }, processingStatus: "ready" },
