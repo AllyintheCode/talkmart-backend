@@ -66,6 +66,9 @@ app.use(
 );
 
 // NoSQL Injection Qoruması (express-mongo-sanitize)
+// Direct init carries the same 5,000-character metadata as multipart uploads;
+// allow its bounded UTF-8 JSON representation without accepting a file body.
+app.use("/api/videos/upload-init", express.json({ limit: "32kb" }));
 app.use(express.json({ limit: "10kb" }));
 // Express 5 exposes query as a getter; sanitize values without assigning req.query.
 app.use((req, res, next) => {

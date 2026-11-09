@@ -4,6 +4,7 @@ import Video from "../models/Video.js";
 import { VideoLike, VideoSave, VideoView } from "../models/VideoInteraction.js";
 import { deleteFromR2 } from "./r2Upload.service.js";
 import { delCachePattern } from "../config/redis.js";
+import UploadSession from "../models/UploadSession.js";
 
 export async function markVideoDeleting(videoId) {
   return Video.findOneAndUpdate(
@@ -49,6 +50,7 @@ export async function cleanupVideoResources(video) {
   ]);
 
   await Video.deleteOne({ _id: video._id, status: "deleting" });
+  await UploadSession.updateOne({ _id: video._id, state: "completed" }, { $unset: { title: "", description: "", price: "", categoryName: "", storageUploadId: "" } });
   await delCachePattern("feed:*");
   await delCachePattern("categories:top:*");
 }

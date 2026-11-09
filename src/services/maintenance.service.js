@@ -14,6 +14,8 @@ import { recoverStuckVideos } from "./videoProcessing.service.js";
 import { observe } from "../utils/metrics.js";
 import { logger } from "../utils/logger.js";
 import { publishIfEligible } from "./videoState.service.js";
+import UploadSession from "../models/UploadSession.js";
+import { expireDirectUploads } from "./directUpload.service.js";
 
 const cursors = new Map();
 let lastVideoId;
@@ -52,7 +54,8 @@ export async function reconcileOrphanObjects() {
         { privateVideoKey: object.Key }, { privateThumbnailKey: object.Key },
         { thumbnail: { $in: legacyUrls } }, { videoUrl: { $in: legacyUrls } },
       ] });
-      if (!referenced) { await deleteFromR2(object.Key); observe("orphan_objects_removed", 1); }
+      const upload = referenced ? true : await UploadSession.exists({ sourceKey: object.Key, cleanupDone: false });
+      if (!referenced && !upload) { await deleteFromR2(object.Key); observe("orphan_objects_removed", 1); }
     }
   }
 }
@@ -67,6 +70,7 @@ export async function cleanupTempFiles() {
   }
 }
 export async function runMaintenance() {
+  await expireDirectUploads();
   await recoverStuckVideos();
   await Video.updateMany({ processingStatus: "uploaded", createdAt: { $lt: new Date(Date.now() - 3600000) } }, { $set: { status: "deleting", processingStatus: "deleting" } });
   for (const user of await User.find({ accountStatus: "deleting" }).limit(10)) {

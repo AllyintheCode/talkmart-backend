@@ -1,8 +1,8 @@
 # Flutter üçün Talkmart test API təlimatı
 
-8 noyabr lokal optimizasiya branch-i üçün əlavə: aşağıdakı [private preview bölməsi](#private-preview-lokal-optimizasiya-buraxılışı) yeni test buraxılışı quraşdırıldıqdan sonra tətbiq olunur. Bu dəyişiklik hələ serverə çıxarılmayıb.
+9 noyabr vəziyyəti: aşağıdakı [private preview bölməsi](#private-preview-lokal-optimizasiya-buraxılışı) test serverində tətbiq olunub. İstifadəçi mövcud APK-də səssiz/səsli oynatma, seek və 11 dəqiqədən sonra sahibin videosunun yenidən açılması axınını təsdiqləyib.
 
-Backend dəyişiklikləri hazırda test mühitindədir. Giriş, provider video yükləməsi, emal, AI təsdiqi, oynatma, bəyənmə/yadda saxlama və admin moderasiyası real serverdə yoxlanılıb. Flutter uyğunlaşdırması və tətbiq daxilində sınaq qalıb.
+Backend optimizasiyaları hazırda test mühitindədir. Giriş, provider video yükləməsi, emal, AI təsdiqi, oynatma, bəyənmə/yadda saxlama və admin moderasiyası real serverdə yoxlanılıb. Ayrıca [hissəli birbaşa R2 upload müqaviləsi](FLUTTER_DIRECT_UPLOAD_AZ.md) yeni lokal mərhələdir; onun real R2 yoxlaması, test backend buraxılışı və Flutter inteqrasiyası hələ gözlənilir. Hazırkı APK multipart yolunu istifadə etməyə davam edir.
 
 - Test base URL: `https://api.talkmart.az/test-api/api`
 - Swagger: `https://api.talkmart.az/test-api/api-docs/`

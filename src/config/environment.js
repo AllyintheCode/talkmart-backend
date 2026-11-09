@@ -1,4 +1,5 @@
 export function validateEnvironment() {
+  if (process.env.DIRECT_UPLOAD_ENABLED !== undefined && !["true", "false"].includes(process.env.DIRECT_UPLOAD_ENABLED)) throw new Error("DIRECT_UPLOAD_ENABLED must be true or false");
   for (const name of ["MONGO_URI", "R2_ENDPOINT", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_STAGING_BUCKET", "R2_PUBLIC_URL"]) {
     if (!process.env[name]) throw new Error(`Missing configuration: ${name}`);
   }

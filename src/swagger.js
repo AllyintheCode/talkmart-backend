@@ -3,7 +3,7 @@ export default {
   "info": {
     "title": "TalkMart API Sənədləri",
     "description": "Flutter tərtibatçıları üçün Backend API endpointləri. Autentifikasiya və Video xidmətlərini ehtiva edir. Access JWTs require issuer, audience, typ=access and sessionVersion. Old tokens require re-login. API errors use error.code and error.message.",
-    "version": "1.2.0"
+    "version": "1.3.0"
   },
   "servers": [
     {
@@ -46,6 +46,163 @@ export default {
             "properties": {
               "requestId": {
                 "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "DirectUploadInit": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "description",
+          "price",
+          "categoryId",
+          "bytes",
+          "contentType"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 200,
+            "default": ""
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 5000
+          },
+          "price": {
+            "type": "number",
+            "minimum": 0
+          },
+          "categoryId": {
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{24}$"
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 262144000
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "video/mp4",
+              "video/quicktime",
+              "video/x-msvideo",
+              "video/x-matroska"
+            ]
+          }
+        }
+      },
+      "DirectUploadPart": {
+        "type": "object",
+        "properties": {
+          "partNumber": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 32
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "bytes": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 8388608
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "PUT"
+            ]
+          },
+          "uploadUrl": {
+            "type": "string",
+            "format": "uri",
+            "description": "Bearer capability. Use unchanged; do not log or attach the backend JWT."
+          },
+          "headers": {
+            "type": "object",
+            "properties": {
+              "Content-Length": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "DirectUploadState": {
+        "type": "object",
+        "properties": {
+          "sessionId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "uploading",
+              "completed",
+              "cancelled",
+              "expired",
+              "failed"
+            ]
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "multipart"
+            ]
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "partSize": {
+            "type": "integer",
+            "example": 8388608
+          },
+          "partCount": {
+            "type": "integer",
+            "maximum": 32
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "urlExpiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "storageComplete": {
+            "type": "boolean",
+            "description": "Storage has completed; call upload-complete to accept the video into the durable queue."
+          },
+          "parts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DirectUploadPart"
+            }
+          },
+          "uploadedParts": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "partNumber": {
+                  "type": "integer"
+                },
+                "bytes": {
+                  "type": "integer"
+                },
+                "etag": {
+                  "type": "string"
+                }
               }
             }
           }
@@ -4082,6 +4239,649 @@ export default {
           },
           "403": {
             "description": "Admin role required"
+          }
+        }
+      }
+    },
+    "/videos/upload-init": {
+      "post": {
+        "tags": [
+          "Video"
+        ],
+        "summary": "Start resumable direct R2 upload (verified provider)",
+        "description": "Opt-in DIRECT_UPLOAD_ENABLED=true. JSON control request; file bytes go to signed UploadPart PUT URLs. Session lasts 30 minutes, each URL at most 10 minutes. Sizes are bytes; non-final parts are 8 MiB. Quota and one active transfer per provider are shared with legacy multipart upload. Same key and metadata replay the session; different metadata with the same key fails.",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 8,
+              "maxLength": 100,
+              "pattern": "^[a-zA-Z0-9_-]+$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DirectUploadInit"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent replay",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "completed": {
+                      "type": "boolean"
+                    },
+                    "upload": {
+                      "$ref": "#/components/schemas/DirectUploadState"
+                    },
+                    "video": {
+                      "type": "object",
+                      "description": "Existing video status contract. Transfer completion initially queues processing; ready/approved/active is required for publication."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "New upload session; no video is queued yet",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "completed": {
+                      "type": "boolean"
+                    },
+                    "upload": {
+                      "$ref": "#/components/schemas/DirectUploadState"
+                    },
+                    "video": {
+                      "type": "object",
+                      "description": "Existing video status contract. Transfer completion initially queues processing; ready/approved/active is required for publication."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid metadata/session/key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Access token required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Verified provider required or account changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found for this owner",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict/incomplete/busy/idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired/cancelled/unavailable; start a new upload if instructed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Quota or control rate limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Direct upload disabled or temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/videos/uploads/{uploadSessionId}": {
+      "get": {
+        "tags": [
+          "Video"
+        ],
+        "summary": "Resume direct upload and refresh missing part URLs",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uploadSessionId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$"
+            }
+          }
+        ],
+        "description": "Only this owner. Returns uploaded parts and fresh signed URLs only for missing/wrong-sized parts. When storageComplete=true call upload-complete. No file body, storage key or ETag is accepted from the client.",
+        "responses": {
+          "200": {
+            "description": "Current transfer state or accepted video",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "completed": {
+                      "type": "boolean"
+                    },
+                    "upload": {
+                      "$ref": "#/components/schemas/DirectUploadState"
+                    },
+                    "video": {
+                      "type": "object",
+                      "description": "Existing video status contract. Transfer completion initially queues processing; ready/approved/active is required for publication."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid metadata/session/key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Access token required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Verified provider required or account changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found for this owner",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict/incomplete/busy/idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired/cancelled/unavailable; start a new upload if instructed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Quota or control rate limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Direct upload disabled or temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Video"
+        ],
+        "summary": "Cancel unfinished direct upload",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "uploadSessionId",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$"
+            }
+          }
+        ],
+        "description": "Aborts multipart storage and refunds unuploaded reserved daily bytes after cleanup. Uploaded bytes remain charged. Safe retry. Completed videos must be deleted with DELETE /videos/{id}.",
+        "responses": {
+          "200": {
+            "description": "Cancelled/expired/failed transfer",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "completed": {
+                      "type": "boolean"
+                    },
+                    "upload": {
+                      "$ref": "#/components/schemas/DirectUploadState"
+                    },
+                    "video": {
+                      "type": "object",
+                      "description": "Existing video status contract. Transfer completion initially queues processing; ready/approved/active is required for publication."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid metadata/session/key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Access token required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Verified provider required or account changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found for this owner",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict/incomplete/busy/idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired/cancelled/unavailable; start a new upload if instructed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Quota or control rate limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Direct upload disabled or temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/videos/upload-complete": {
+      "post": {
+        "tags": [
+          "Video"
+        ],
+        "summary": "Complete direct upload and queue exactly one video",
+        "description": "Server reads authoritative part numbers, sizes and ETags, closes multipart storage, verifies HEAD ownership/size/type and atomically creates the durable queued video. Complete is transfer acceptance, not AI approval. Worker validates the actual container/codec/duration before AI. Repeat returns the same existing video; deleting the video cannot resurrect it.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "sessionId"
+                ],
+                "properties": {
+                  "sessionId": {
+                    "type": "string",
+                    "pattern": "^[a-fA-F0-9]{24}$"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing accepted video replay",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "completed": {
+                      "type": "boolean"
+                    },
+                    "upload": {
+                      "$ref": "#/components/schemas/DirectUploadState"
+                    },
+                    "video": {
+                      "type": "object",
+                      "description": "Existing video status contract. Transfer completion initially queues processing; ready/approved/active is required for publication."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Video accepted into durable queue",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "private, no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "completed": {
+                      "type": "boolean"
+                    },
+                    "upload": {
+                      "$ref": "#/components/schemas/DirectUploadState"
+                    },
+                    "video": {
+                      "type": "object",
+                      "description": "Existing video status contract. Transfer completion initially queues processing; ready/approved/active is required for publication."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid metadata/session/key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Access token required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Verified provider required or account changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Session not found for this owner",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict/incomplete/busy/idempotency mismatch",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "Expired/cancelled/unavailable; start a new upload if instructed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Quota or control rate limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Direct upload disabled or temporarily unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            }
           }
         }
       }

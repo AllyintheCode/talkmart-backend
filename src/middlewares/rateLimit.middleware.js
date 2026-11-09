@@ -44,3 +44,4 @@ export const authIpLimiter = limiter("auth-ip", 30, 600000, ip);
 export const authLimiter = limiter("auth-account", 10, 600000, account);
 export const engagementLimiter = limiter("engagement", 30, 60000, account);
 export const uploadLimiter = limiter("upload", 15, 600000, account);
+export const directUploadControlLimiter = limiter("direct-upload-control", 60, 600000, account);

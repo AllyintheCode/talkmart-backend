@@ -17,12 +17,14 @@ import {
 } from "../controllers/engagement.controller.js";
 import { verifyToken, providerOnly, verifiedProviderOnly, requireAuth, optionalAuth } from "../middlewares/auth.middleware.js";
 import { receiveVideo } from "../middlewares/upload.middleware.js";
-import { engagementLimiter, uploadLimiter } from "../middlewares/rateLimit.middleware.js";
+import { engagementLimiter, uploadLimiter, directUploadControlLimiter } from "../middlewares/rateLimit.middleware.js";
+import { initUpload, uploadStatus, completeUpload, cancelUpload } from "../controllers/directUpload.controller.js";
 
 import { uploadQuota } from "../middlewares/uploadQuota.middleware.js";
 import { validateId } from "../middlewares/api.middleware.js";
 const router = Router();
 router.param("id", validateId);
+router.param("uploadSessionId", validateId);
 
 // ============================
 // PUBLIC FEED / EXPLORE ROUTE-ları
@@ -68,6 +70,10 @@ router.post("/:id/save", requireAuth, engagementLimiter, toggleSave);
 
 // POST /api/videos/upload  →  video + description + price
 router.post("/upload", verifyToken, verifiedProviderOnly, uploadLimiter, uploadQuota, receiveVideo, createVideo);
+router.post("/upload-init", verifyToken, verifiedProviderOnly, uploadLimiter, initUpload);
+router.get("/uploads/:uploadSessionId", verifyToken, verifiedProviderOnly, directUploadControlLimiter, uploadStatus);
+router.post("/upload-complete", verifyToken, verifiedProviderOnly, directUploadControlLimiter, completeUpload);
+router.delete("/uploads/:uploadSessionId", verifyToken, verifiedProviderOnly, directUploadControlLimiter, cancelUpload);
 
 // GET /api/videos/my-videos  →  providerin öz videoları
 router.get("/my-videos", verifyToken, providerOnly, getMyVideos);

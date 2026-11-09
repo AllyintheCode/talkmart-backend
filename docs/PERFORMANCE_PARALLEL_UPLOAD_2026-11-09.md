@@ -2,6 +2,8 @@
 
 Mobil qəbul sınaqları tamamlanıb: səssiz 4K oynatma/seek, sahibin private videosunun 11 dəqiqə sonra yenidən açılması, ayrıca səsli H.264/AAC klipin oynadılması və sarıldıqdan sonra səsin davam etməsi istifadəçi tərəfindən təsdiqlənib. [Server media/AI ölçmələri](PERFORMANCE_AI_SAMPLING_2026-11-09.md) ayrıca saxlanır. Yeni lokal upload dəsti həmin nəticələrdən fərqli mərhələni ölçür.
 
+Bu ölçmədən sonrakı iş: [direct R2 backend-i lokalda hazırlanıb](DIRECT_UPLOAD_IMPLEMENTATION_2026-11-09.md). Aşağıdakı rəqəmlər əvvəlki multipart qəbul yolunundur; direct upload yaddaş/sürət nəticəsi kimi götürülməməlidir.
+
 ## Nə həqiqidir, nə simulyasiyadır
 
 Yeni `scripts/perf/uploads.js` ayrıca müvəqqəti MongoDB replica set-i və loopback-də təsadüfi portda real Express tətbiqini açır. HTTP multipart body, JWT və provider yoxlaması, dəyişdirilməmiş rate/quota qaydaları, Multer disk storage, FFprobe, AWS SDK `Upload` multipart hissələri və MongoDB-də durable `queued` video qeydi həqiqidir. API üçün 25 ayrıca sintetik provider yaradılır. Baza və HTTP origin parametr kimi kənardan qəbul edilmir; production və staging ünvanları guard tərəfindən rədd edilir. Child proses caller açarlarını və `.env` faylını istifadə etmir.

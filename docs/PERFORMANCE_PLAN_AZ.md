@@ -2,6 +2,8 @@
 
 Ən son vəziyyət: [9 noyabr paralel HTTP upload hesabatı](PERFORMANCE_PARALLEL_UPLOAD_2026-11-09.md), [server AI/media və APK nəticələri](PERFORMANCE_AI_SAMPLING_2026-11-09.md). Aşağıdakı müqayisə ilkin vəziyyətin və yol xəritəsinin qeydidir.
 
+Növbəti lokal mərhələ: [birbaşa hissəli R2 upload backend-i](DIRECT_UPLOAD_IMPLEMENTATION_2026-11-09.md) hazırlanıb, standart olaraq bağlıdır. Real test R2 preflight, test API/worker buraxılışı və yeni Flutter axını hələ gözlənilir.
+
 Mənbə: `Talkmart_Backend_Performans_Optimizasiya_Plani_2026-10-25.pdf`, 15 səhifə. Müqayisə bazası: canlıya çıxmış `94cc79d5d57365fcd41aeecb576587e49dcc19b3`. Sənəddəki vaxtlar və prioritetlər təklifdir; hazırkı sistemin ölçülmüş nəticəsi deyil.
 
 İlk mərhələdə mövcud backend-in ayrıca lokal sınaq mühiti yaradılıb. Aşağıdakı müqayisə dəyişiklikdən əvvəlki vəziyyəti təsvir edir. Sonra istifadəçinin göstərişi ilə private media, Explore və keyfiyyəti saxlayan remux lokal branch-də tətbiq edilib. Yeni davranış, əvvəl/sonra ölçmələri və qalan testlər [8 noyabr optimizasiya hesabatındadır](PERFORMANCE_OPTIMIZATION_2026-11-08.md). Canlı VPS-ə yük göndərilmir, real istifadəçilər/baza köçürülmür.

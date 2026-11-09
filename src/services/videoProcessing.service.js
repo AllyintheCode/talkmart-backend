@@ -81,7 +81,12 @@ export async function processVideoJob(job) {
     let t = Date.now();
     await downloadFromR2(job.stagingKey, input);
     observe("r2_download_ms", Date.now() - t);
-    await validateUploadedVideo(input);
+    const probe = await validateUploadedVideo(input);
+    if (job.sourceBytes && (await fs.stat(input)).size !== job.sourceBytes) throw Object.assign(new Error("SOURCE_SIZE_MISMATCH"), { code: "SOURCE_SIZE_MISMATCH" });
+    // Direct uploads are validated here, before AI or media publication. Legacy
+    // multipart uploads already had an API probe; the worker remains authoritative.
+    job.duration = probe.duration;
+    if (!(await Video.updateOne(leaseFilter(job), { $set: { duration: probe.duration } })).matchedCount) return;
     // Retain media for manual review and admin overrides, including AI rejection.
     const prepared = await prepareVideoMedia({ input, originalExt: job.originalExt, categoryName: job.categoryName, duration: job.duration });
     const ai = prepared.ai;
@@ -101,7 +106,7 @@ export async function processVideoJob(job) {
   } catch (err) {
     logger.error("video_job_failed", { videoId: job._id, attempt: job.attempt }, err);
     await Video.updateOne(leaseFilter(job), { $set: {
-      processingStatus: job.attempt >= MAX_ATTEMPTS ? "failed" : "queued",
+      processingStatus: job.attempt >= MAX_ATTEMPTS || ["SOURCE_SIZE_MISMATCH", "CORRUPT_VIDEO", "UNSUPPORTED_FORMAT", "VIDEO_TOO_LONG", "VIDEO_RESOLUTION_TOO_HIGH"].includes(err.code) ? "failed" : "queued",
       workerId: null, lockedUntil: null, nextAttemptAt: new Date(Date.now() + 10000 * 2 ** job.attempt),
     } }, { runValidators: true });
   } finally {

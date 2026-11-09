@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 process.env.NODE_ENV = "test";
 process.env.REDIS_DISABLED = "true";
+process.env.DIRECT_UPLOAD_ENABLED = "false";
 process.env.JWT_SECRET = crypto.randomBytes(32).toString("hex");
 process.env.OTP_PEPPER = crypto.randomBytes(32).toString("hex");
 process.env.R2_ENDPOINT = "https://storage.invalid";
