@@ -1,6 +1,6 @@
 # Optimizasiyanın davamı — 8 noyabr 2026
 
-9 noyabr real server nəticəsi: admin/user/guest və public/private media silinməsi sınaqları keçdi. Yeni upload AI tərəfindən təsdiqləndi, lakin media commit 127.254 s çəkdi. Bu səbəbdən [orijinal upload üçün bitrate seçim düzəlişi](PERFORMANCE_ORIGINAL_UPLOAD_FIX_2026-11-09.md) hazırlanıb; serverdə təkrar sürət ölçməsi qalır.
+9 noyabr yenilənməsi: admin/user/guest və public/private media silinməsi sınaqları keçdi. [Orijinal upload üçün bitrate düzəlişi](PERFORMANCE_ORIGINAL_UPLOAD_FIX_2026-11-09.md) və [adaptiv AI kadr seçimi](PERFORMANCE_AI_SAMPLING_2026-11-09.md) test VPS-ə tətbiq edildi; son 20 saniyəlik nümunənin worker işi 14.586 s, media commit intervalı 15.040 s oldu. Səsli/səssiz APK oynatma və seek sınaqları keçdi. [Paralel HTTP upload qəbulu](PERFORMANCE_PARALLEL_UPLOAD_2026-11-09.md) ayrıca lokalda 20/35/50 MB × 5/10/25 matrisində yoxlandı. Aşağıdakı bölmələr əvvəlki 8 noyabr ölçmə anını təsvir edir; production optimizasiya buraxılışına keçirilməyib.
 
 Bu mərhələdə AI/FFmpeg paralel hazırlama tətbiq edilib, 100k video ilə API ölçülüb və faktiki worker prosesinin qəfil dayanması yoxlanıb. Kod lokal `codex/performance-baseline` branch-dədir. Real VPS, production baza və bucket-lər dəyişdirilməyib.
 

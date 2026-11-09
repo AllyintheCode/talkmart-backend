@@ -12,6 +12,7 @@
     "perf:api": "node scripts/perf/api.js",
     "perf:media": "node scripts/perf/media.js",
     "perf:worker": "node scripts/perf/worker.js",
+    "perf:uploads": "node scripts/perf/uploads.js",
     "lint": "node scripts/check-source.js",
     "build": "node scripts/check-source.js",
     "migrate:video-state": "node scripts/migrate-video-state.js"

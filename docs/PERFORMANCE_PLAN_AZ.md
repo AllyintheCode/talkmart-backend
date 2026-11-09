@@ -1,6 +1,6 @@
 # Performans planının təhlili və lokal ölçmə
 
-Ən son vəziyyət: [8 noyabr davam hesabatı](PERFORMANCE_CONTINUATION_2026-11-08.md). Aşağıdakı müqayisə ilkin vəziyyətin və yol xəritəsinin qeydidir.
+Ən son vəziyyət: [9 noyabr paralel HTTP upload hesabatı](PERFORMANCE_PARALLEL_UPLOAD_2026-11-09.md), [server AI/media və APK nəticələri](PERFORMANCE_AI_SAMPLING_2026-11-09.md). Aşağıdakı müqayisə ilkin vəziyyətin və yol xəritəsinin qeydidir.
 
 Mənbə: `Talkmart_Backend_Performans_Optimizasiya_Plani_2026-10-25.pdf`, 15 səhifə. Müqayisə bazası: canlıya çıxmış `94cc79d5d57365fcd41aeecb576587e49dcc19b3`. Sənəddəki vaxtlar və prioritetlər təklifdir; hazırkı sistemin ölçülmüş nəticəsi deyil.
 

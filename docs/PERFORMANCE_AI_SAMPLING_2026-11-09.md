@@ -25,7 +25,7 @@ Mənbə: `6195513-uhd_2160_3840_25fps.mp4`, 32,350,603 byte, SHA-256 `ae239bff40
 
 Eyni dörd orijinal kadrın yeni çıxışındakı decode olunmuş piksel buffer-ləri əvvəlki bir keçid nəticəsi ilə tam eynidir. Rəngli dörd zaman pəncərəsi olan real H.264 fixture-lər həm qısa, həm uzun GOP üçün yoxlanıb. Natamam nümunələr, bitmiş deadline və müvəqqəti faylların silinməsi də yoxlanıb.
 
-Ölçmələr ayrı lokal trial-lardır; warm cache, proses yükü və avadanlıq fərqləri təsir edə bilər. Bunlar VPS-də Gemini vaxtı, AI üçün `<5 s`, worker üçün `<20 s`, p95 və ya tam upload müddəti kimi təqdim edilmir. Serverdə yeni upload hələ tələb olunur.
+Ölçmələr ayrı lokal trial-lardır; warm cache, proses yükü və avadanlıq fərqləri təsir edə bilər. Lokal ölçmələr VPS-də Gemini vaxtı, AI üçün `<5 s`, worker üçün `<20 s`, p95 və ya tam upload müddəti kimi təqdim edilmir. Ayrı server nəticəsi aşağıda qeyd olunub.
 
 Lokal nəticələr:
 
@@ -38,8 +38,39 @@ Lint, 32 unit/media/performance/staging və 30 integration testi keçib: **62 te
 
 ## Test serverinə tətbiq və növbəti ölçmə
 
-Yalnız `/var/www/backend-perf-test-20261108` və `talkmart-worker-test` hədəfdir. Yeni paket `6c794e1` üzərinə fast-forward tətbiq olunur; boş test növbəsi, staging env, process yolları və production PID-ləri yoxlanır. Test API və production restart edilmir; DB miqrasiyası və mövcud videoların təkrar emalı yoxdur. Köhnə upload-a recheck etmək yeni işin tam vaxtını ölçməz.
+Yalnız `/var/www/backend-perf-test-20261108` və `talkmart-worker-test` hədəfdir. Yeni paket `6c794e1` üzərinə fast-forward tətbiq olunub: `ffc1c33b193f9a6b31a8457cfab8482ffb8e75cb`. Boş test növbəsi, staging env, process yolları və production PID-ləri yoxlanıb. Serverdə 32 test keçib və yeni worker heartbeat təsdiqlənib. Test API və production PID-ləri saxlanıb; DB miqrasiyası və mövcud videoların təkrar emalı yoxdur. Köhnə upload-a recheck etmək yeni işin tam vaxtını ölçməz.
 
-Yeniləmədən sonra eyni orijinal ilə yeni `PERF test təmizlik 3` upload-u və yeni `Idempotency-Key` istifadə olunmalıdır. Sonra mövcud `scripts/staging/check-upload.js --id=<yeni-id> --wait` ilə yeni PID-yə aid metriklər götürülür. Kadr və model vaxtlarını bu nəticə ayıracaq. Signed preview-nun 600 saniyədən sonra yenilənməsi Flutter tərəfdə ayrıca qəbul sınağı olaraq qalır. Direct R2 upload, real paralel HTTP upload və production Redis/CDN yük sınaqları bu paketin hissəsi deyil.
+Yeni `PERF test təmizlik 3` upload-u `perf-upload-20261109-03` açarı ilə qəbul olunub: `6af0f77287dd1d2bb07b2f21`. `scripts/staging/check-upload.js --id=6af0f77287dd1d2bb07b2f21 --wait` nəticəsində `ready/approved/active`, AI 95 bal və bir cəhd təsdiqlənib.
+
+## Serverdə ölçülən nəticə
+
+| Mərhələ | Lazımsız encode ilə | Remux düzəlişi | Adaptiv kadr seçimi |
+|---|---:|---:|---:|
+| Worker işi | 130,397 ms | 20,459 ms | 14,586 ms |
+| AI, kadrlar daxil | 14,314 ms | 11,056 ms | 6,931 ms |
+| FFmpeg hazırlama | 117,040 ms | 350 ms | 420 ms |
+| createdAt → private media commit | 127.254 s | 20.524 s | 15.040 s |
+
+Yeni metriklər: `ai_frames_ms=5,259`, `ai_model_ms=1,671`; hərəsində bir nümunə var. AI toplamı ölçmə sərhədlərinə görə cəmdən 1 ms fərqlənir. R2 download 1,061 ms, private upload/thumbnail mərhələsi 4,132 ms, queue göstəricisi 2,674 ms-dir. Bu mərhələlərin ölçmə sərhədləri və paralelliyi fərqlidir; hamısını sadə cəmlə worker müddəti kimi təqdim etmək düzgün deyil.
+
+Bu trial-da worker işi əvvəlki remux buraxılışına nisbətən 28.71%, AI mərhələsi 37.31% azalıb. İlkin işlə müqayisədə worker təxminən 8.94 dəfə sürətlidir. Dəyişən model/şəbəkə vaxtı da müqayisəyə təsir edir; bütün fərq yalnız kadr koduna aid edilmir. Əvvəlki worker-də ayrıca kadr metrikləri olmadığından serverdə kadr müddətinin dəqiq əvvəl/sonra nisbəti çıxarılmır.
+
+Yeni worker PID 680359, başlanğıc `2026-11-08T22:26:31.226Z`, heartbeat `22:28:36.141Z`, report müşahidəsi `22:28:40.604Z`. Video `22:28:02.619Z` yaradılıb, private media `22:28:17.659Z` commit olunub. Mənbə ölçüsü yenə 32,350,603 byte, private/public MP4 ölçüsü 32,350,392 byte-dır; revocation gözləmədə deyil.
+
+Server report: `tmp/upload-check-6af0f77287dd1d2bb07b2f21-ea5c02c0-2275-470d-9582-7d813a455438.json`. Lokal əməliyyat qeydi: `tmp/deployment/ai-sampling-server-result.json`.
+
+Bu bir iş nümunəsi 20 saniyədən aşağıdır, p95 və ya bütün videolar üçün təminat deyil. Ümumi AI 6.931 saniyə olduğundan PDF-dəki `<5 s AI` hədəfi hələ keçməyib; yalnız model çağırışının 1.671 s olmasını bütün AI mərhələsinin vaxtı kimi götürmək olmaz. Client internet upload-u və sonrakı public copy tam olaraq `createdAt → completedAt` intervalına daxil deyil. Adaptiv yolun seçimi report-da ayrıca yazılmır; burada ölçülən kadr vaxtı yeni kodun ümumi extraction müddətidir.
+
+İstifadəçi manual APK sınağında uyğun olmayan videonun yalnız sahibinin profilində qaldığını, başqa user və lentdə görünmədiyini, 11 dəqiqə sonra profilə qayıdıb videonu açanda normal oynadığını təsdiqləyib. Bu, həmin istifadəçi axınının keçməsidir; yeni URL alınması ilə cached playback-i ayıran şəbəkə trace-i götürülməyib.
+
+Səsli klip üçün ayrıca lokal `tmp/deployment/talkmart-audio-test-20261109.mp4` hazırlanıb: əvvəlki təmizlik videosunun ilk 8 saniyəsi, 2160×3840 H.264 görüntü və əlavə edilmiş 440 Hz mono AAC test tonu. Bu, səhnənin orijinal səsi deyil. Fayl 13,257,584 byte-dır. Lokal real backend remux-u video və audio paket hash-lərini saxlayır; remux-dan decode olunmuş audio səssiz deyil. Orijinal mənbə faylı dəyişməyib. Report: `tmp/deployment/audio-test-manifest.json`.
+
+Real staging upload `6af1e68f87dd1d2bb07b2f23` (`PERF səsli təmizlik`) eyni `ffc1c33` kodunda `ready/approved/active`, AI 95 bal və bir worker cəhdi ilə tamamlanıb. `createdAt=2026-11-09T15:28:15.961Z` → `completedAt=2026-11-09T15:28:35.813Z`, private media commit intervalı 19.852 s-dir. Private/public MP4 13,257,583 byte-dır, revocation gözləmədə deyil. Bu interval client upload-u və sonrakı public copy-ni tam əhatə etmir. 8 saniyəlik yeni klip əvvəlki 20 saniyəlik klipin sürət müqayisəsi kimi götürülməməlidir.
+
+Bu dəfə worker PID yenə 680359-dur və metriklər 3 media işi / 4 model cəhdi üzrə aggregate-dir. `video_job_ms p95=18,318`, `ai_ms p95=14,140`, `ai_frames_ms p95=5,259`, `ai_model_ms p95=6,508` dəyərləri yalnız bu səsli videonun vaxtları deyil və belə kiçik nümunə xidmət p95 təminatı yaratmır. Server report: `tmp/upload-check-6af1e68f87dd1d2bb07b2f23-2a83d876-5022-4473-b81a-7ce74d201765.json`; lokal əməliyyat qeydi `tmp/deployment/audio-test-server-result.json`. İstifadəçi test APK-də test səsinin eşidildiyini, irəli/geri sarılmanın işlədiyini və sarıldıqdan sonra səsin davam etdiyini təsdiqləyib. Səsli mobil oynatma sınağı keçib.
+
+Direct R2 upload, real paralel HTTP upload və production Redis/CDN yük sınaqları bu paketin hissəsi deyil. Production-a keçid edilməyib.
+
+Növbəti lokal iş: [real paralel HTTP upload qəbulu sınağı](PERFORMANCE_PARALLEL_UPLOAD_2026-11-09.md). Bu, worker-də əvvəlcədən yaradılmış job batch-lərindən ayrıca ölçmədir.
 
 Texniki mənbələr: FFmpeg-in [dəqiq input seek izahı](https://github.com/FFmpeg/FFmpeg/blob/master/doc/ffmpeg.texi) və FFprobe-un [packet və seçilmiş sahələrin çıxışı](https://github.com/FFmpeg/FFmpeg/blob/master/doc/ffprobe.texi). Packet indeksi yol seçir, moderasiya sübutu isə həmişə decode olunmuş dörd şəkildir.
