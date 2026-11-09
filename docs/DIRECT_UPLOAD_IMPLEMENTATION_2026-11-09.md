@@ -1,6 +1,6 @@
-# Birbaşa R2 upload — lokal backend, 9 noyabr 2026
+# Birbaşa R2 upload — backend, 9 noyabr 2026
 
-Yeni API/worker yalnız staging-də `73de3a9f5447db17e0d4ffb4b0e1e9c5cfd0814b` buraxılışı ilə aktivləşdirilib; production əvvəlki audit buraxılışındadır. Yeni yol `DIRECT_UPLOAD_ENABLED=false` ilə standart olaraq bağlıdır, yalnız staging env-də açılıb. Mövcud multipart APK yolu, video status adları və public görünürlük qaydaları saxlanılıb. Real R2 transfer/resume/complete və ilk worker/AI işi keçib; [faktiki nəticə və qalan yoxlamalar](DIRECT_UPLOAD_STAGING_RESULT_2026-11-09.md) ayrıca qeyd olunub.
+10 noyabr yenilənməsi: API/worker production-da `740c57e09cb9e25439d994a1ed8ae0fa527e7b8f`, staging-də `73de3a9f5447db17e0d4ffb4b0e1e9c5cfd0814b` ilə aktivdir. Yeni yol kodda `DIRECT_UPLOAD_ENABLED=false` standartına malikdir, iki mühitin env-ində açılıb. Mövcud multipart APK yolu, video status adları və public görünürlük qaydaları saxlanılıb. [Production keçidi](PRODUCTION_PERFORMANCE_RELEASE_2026-11-10_AZ.md), [staging nəticəsi](DIRECT_UPLOAD_STAGING_RESULT_2026-11-09.md) və [qalan Flutter işləri](PRODUCTION_FLUTTER_HANDOFF_2026-11-10_AZ.md) ayrıca qeyd olunub.
 
 ## Yeni axın və məlumatlar
 
@@ -32,9 +32,9 @@ Ssenarilər: opt-in/verified-provider/token tipi/sahiblik, metadata və ölçü 
 
 Son direct dəsti **20 ssenaridən** ibarətdir. Yuxarıdakı 35 unit və 30 əvvəlki integration ilə birlikdə **85 test keçib**. Sonrakı aktivləşdirmə/upload helper-lərinə altı guard testi əlavə edilib; yekun source check, **41 unit və 50 integration — 91 test** keçib. Init retry ilə tamamlanma yarışında cavab forması saxlanır; yanlış/sonsuz/mənfi kvota konfiqurasiyası limitləri səssizcə ləğv etmir. İki OpenAPI mənbəyinin eyniliyi yoxlanıb. Lokal guard yoxlaması standalone R2 script-in Windows workspace-dən servis açmadan dayanmasını təsdiqləyib. Bu lokal testlərdən əlavə real Cloudflare preflight nəticəsi aşağıda ayrıca göstərilir.
 
-OpenAPI 1.3.0 hər iki mənbədə yenilənib. [Flutter müqaviləsi](FLUTTER_DIRECT_UPLOAD_AZ.md) sorğu nümunələrini, hissə offset-lərini, progress/resume/cancel/retry və səhv kodlarını verir. Test API/worker aktivdir, real upload keçib. Telefonda ilk playback/seek uğurlu olsa da sonradan user lentində aralıq oynatma problemi bildirilib; [diaqnostika](FLUTTER_PLAYBACK_DIAGNOSTICS_AZ.md) açıqdır. Bu problem həll olunduqdan sonra yeni axının test APK-də qoşulması və mobil resume sınaqları davam edir. Production-a bu mərhələdə keçilmir.
+OpenAPI 1.3.0 hər iki mənbədə yenilənib. [Flutter müqaviləsi](FLUTTER_DIRECT_UPLOAD_AZ.md) sorğu nümunələrini, hissə offset-lərini, progress/resume/cancel/retry və səhv kodlarını verir. API/worker production və staging-də aktivdir, staging real upload keçib. Telefonda ilk playback/seek uğurlu olsa da sonradan user lentində aralıq oynatma problemi bildirilib; [diaqnostika](FLUTTER_PLAYBACK_DIAGNOSTICS_AZ.md) açıqdır. Bu problem həll olunduqdan sonra yeni axının test APK-də qoşulması və mobil resume sınaqları davam edir. Production backend keçidi tamamlanıb; mobil axının production qəbul sınağı ayrıca qalır.
 
-## Növbəti addım: R2 uyğunluğu
+## R2 uyğunluğu və buraxılış nəticələri
 
 Standalone `tmp/deployment/direct-r2-preflight.mjs` yalnız test serverinin `tmp/direct-r2-preflight.mjs` yerindən işləyir. Mövcud staging guard-dan DB/bucket/JWT ayrılığını və dəqiq PM2 yollarını yoxlayır. Test bucket-də UUID-li bir private object üçün iki hissə yaradır: 8 MiB və kiçik marker. Yanlış ölçülü imzalı PUT, vaxtı bitmiş URL, ListParts/Complete/HEAD metadata, tamamlandıqdan sonra köhnə part URL-in rəddi və tam source SHA-256 yoxlanır. Sonda öz multipart/object-i silinir və bütün API/worker PID/start vaxtları müqayisə edilir.
 
@@ -42,6 +42,6 @@ Bu preflight application DB-yə yazmır, `.env` dəyişmir, proses restart etmir
 
 Real server nəticəsi alınıb: yeddi yoxlamanın hamısı keçib, sınaq object/MPU-ları silinib və bütün API/worker PID-ləri saxlanıb. Report: `tmp/direct-r2-preflight-8b97c5c4-bb1b-44f0-9bd2-11696a120cd1.json`. Sonra [test API/worker keçidi](DIRECT_UPLOAD_STAGING_ROLLOUT_AZ.md) və real upload/worker işi də keçib. [Nəticə](DIRECT_UPLOAD_STAGING_RESULT_2026-11-09.md) telefon playback/resume və performans hədəflərinin hələ qaldığını ayrıca göstərir.
 
-Preflight keçəndən sonra ayrıca test kod/env backup-ı ilə API və worker birlikdə yenilənməli, yalnız staging-də feature açılmalıdır. Worker yeni direct job-ların müddətini probe ilə doldurmalıdır. Aktiv direct sessiyalar və ya yeni queued job-lar varkən köhnə worker-ə kor-koranə rollback olmaz: əvvəl yeni init bağlanır, yeni kodla sessiyalar tamamlanır/ləğv olunur və növbə boşaldılır. Bundan sonra Flutter və 20/35/50 MB müqayisəsi aparılır. Init `<300 ms`, API RSS azalması və real model/R2 p95 hələ ölçülmüş təminat deyil.
+Test preflight-dən sonra staging kod/env backup-ı ilə API və worker birlikdə yenilənib, əvvəl staging-də feature açılıb. Sonra ayrıca production canary/backup/keçid tamamlanıb. Worker yeni direct job-ların müddətini probe ilə doldurur. Aktiv direct sessiyalar və ya yeni queued job-lar varkən köhnə worker-ə kor-koranə rollback olmaz: əvvəl yeni init bağlanır, yeni kodla sessiyalar tamamlanır/ləğv olunur və növbə boşaldılır. Flutter və 20/35/50 MB real direct müqayisəsi qalır. Init `<300 ms`, API RSS azalması və real model/R2 p95 hələ ölçülmüş təminat deyil.
 
 Mənbələr: [R2 presigned URL semantikası](https://developers.cloudflare.com/r2/api/s3/presigned-urls/), [R2 multipart/S3 dəstəyi](https://developers.cloudflare.com/r2/api/s3/api/). Hazırkı real S3 davranışı staging nəticəsi ilə təsdiqlənməlidir.

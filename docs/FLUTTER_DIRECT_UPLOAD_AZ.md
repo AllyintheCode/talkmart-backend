@@ -1,10 +1,10 @@
 # Flutter: hissəli birbaşa R2 upload müqaviləsi
 
-9 noyabr 2026: yeni yol yalnız test serverində `73de3a9f5447db17e0d4ffb4b0e1e9c5cfd0814b` buraxılışı ilə aktivdir. Real R2 upload, hissə saxlanmaqla resume, idempotent complete və worker/AI işi keçib. “PERF direct təmizlik” videosu test APK-də oynadılıb, lakin sonrakı yoxlamada user lentində bəzi videolarda aralıq oynatma problemi bildirilib. Əvvəl [oynatma diaqnostikası](FLUTTER_PLAYBACK_DIAGNOSTICS_AZ.md) tamamlanmalıdır. Playback nəticəsi APK-nın artıq yeni direct upload yolundan istifadə etdiyini göstərmir; aşağıdakı axın Flutter-də ayrıca qoşulmalıdır.
+10 noyabr 2026: yeni yol production-da `740c57e09cb9e25439d994a1ed8ae0fa527e7b8f`, test serverində `73de3a9f5447db17e0d4ffb4b0e1e9c5cfd0814b` buraxılışı ilə aktivdir. Real R2 upload, hissə saxlanmaqla resume, idempotent complete və worker/AI işi staging-də keçib; production storage canary/auth/worker yoxlamaları da keçib. “PERF direct təmizlik” videosu test APK-də oynadılıb, lakin sonrakı yoxlamada user lentində bəzi videolarda aralıq oynatma problemi bildirilib. Əvvəl [oynatma diaqnostikası](FLUTTER_PLAYBACK_DIAGNOSTICS_AZ.md) tamamlanmalıdır. Playback nəticəsi APK-nın artıq yeni direct upload yolundan istifadə etdiyini göstərmir; aşağıdakı axın Flutter-də ayrıca qoşulmalıdır.
 
-Production-a bu dəyişiklik tətbiq edilməyib. `DIRECT_UPLOAD_ENABLED` standart olaraq `false`-dur. Mövcud `POST /videos/upload` multipart yolu saxlanılıb. Yeni axın əvvəlcə test APK-də yoxlanmalıdır; bu tapşırıq üçün production base URL-ni dəyişməyin.
+`DIRECT_UPLOAD_ENABLED` kodda standart olaraq `false`-dur; production və staging env-də açılıb. Mövcud `POST /videos/upload` multipart yolu saxlanılıb. Yeni mobil axın əvvəlcə test APK-də yoxlanmalı, sonra [canlı build təlimatına](PRODUCTION_FLUTTER_HANDOFF_2026-11-10_AZ.md) uyğun production-a çıxmalıdır.
 
-Backend test base URL: `https://api.talkmart.az/test-api/api`. Aşağıdakı yollar bu base-ə əlavə olunur. Backend sorğularına provider access token-i verin. R2 URL-lərinə backend Bearer token-i göndərməyin.
+Backend test base URL: `https://api.talkmart.az/test-api/api`; canlı base: `https://api.talkmart.az/api`. Aşağıdakı JSON nümunəsi və categoryId test bazası üçündür; production üçün seçilmiş mühitin `/categories` ID-lərini istifadə edin. Yollar seçilmiş base-ə əlavə olunur. Backend sorğularına həmin mühitin provider access token-i verin. R2 URL-lərinə backend Bearer token-i göndərməyin.
 
 ## 1. Upload sessiyası açmaq
 

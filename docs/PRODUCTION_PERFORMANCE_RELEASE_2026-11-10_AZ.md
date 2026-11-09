@@ -1,6 +1,6 @@
 # Audit və performans dəyişikliklərinin canlıya hazırlanması
 
-10 noyabr 2026: istifadəçi iki PDF üzrə hazır backend dəyişikliklərinin canlı serverə keçirilməsini istəyib. Əlavə deploy təsdiqi tələb olunmur. Audit buraxılışı artıq production-dadır: `94cc79d5d57365fcd41aeecb576587e49dcc19b3`. Hazır optimizasiya kodu bunun descendant-ıdır. Bu sənəd hazırlığı qeyd edir; faktiki production keçidi hələ baş verməyib.
+10 noyabr 2026: istifadəçinin istəyi ilə iki PDF üzrə hazır backend dəyişiklikləri canlıya keçirilib. Əvvəlki audit buraxılışı `94cc79d5d57365fcd41aeecb576587e49dcc19b3` üzərinə `740c57e09cb9e25439d994a1ed8ae0fa527e7b8f` tətbiq olunub. Production qovluğu `/var/www/backend-release-20261106` olaraq saxlanıb. Yeni private media/performans/direct-upload kodu canlıdır; mobil qəbul və ölçmə hədəfləri aşağıda ayrıca göstərilir.
 
 ## Buraxılışın sərhədi
 
@@ -42,4 +42,12 @@ Yeni worker restart əmri verilməzdən **əvvəl** journal rollback sərhədini
 
 Yeni worker hələ başlaya bilməyibsə, direct session yoxdursa və kod/env başqa operator tərəfindən dəyişməyibsə yalnız əvvəlki kod/env/dependency-lər avtomatik qaytarıla bilər. Application DB snapshot-dan avtomatik restore edilmir. Yeni worker/admission sərhədindən sonra köhnə kod bərpa edilmir: yeni direct init bağlanır, təmiz yeni kodla API bərpa edilir və mövcud session/media məlumatları saxlanır. Kənar kod/env dəyişikliyi varsa üstündən yazılmır və restart qorunan şərtlərdən keçməlidir. SIGKILL zamanı kernel lock buraxılır, journal isə diskdə qalır; uğursuz əmri kor-koranə təkrar işlətmək olmaz.
 
-Bu cutover hələ production-da icra edilməyib. Yeddi əlavə lokal guard testi report/freshness, new-worker rollback sərhədi, production-only proses əmrləri, staging PID-ləri, module path-ləri, env qorunması və PM2-dəki effective açarlarla env faylının uyğunluğunu yoxlayır. Helper həm köhnə, həm yeni API-də eyni əvvəlcədən yaradılmış tokenin qəbulunu yoxlayır. Lokal guard testləri faktiki Linux rename, PM2 restart və DB/media əməliyyatlarının keçdiyini iddia etmir.
+Yeddi əlavə lokal guard testi report/freshness, new-worker rollback sərhədi, production-only proses əmrləri, staging PID-ləri, module path-ləri, env qorunması və PM2-dəki effective açarlarla env faylının uyğunluğunu yoxlayır. Helper həm köhnə, həm yeni API-də eyni əvvəlcədən yaradılmış tokenin qəbulunu yoxlayır. Lokal testlərdən əlavə faktiki Linux keçidinin uğuru aşağıdakı istifadəçi çıxışı ilə qeydə alınıb.
+
+## Faktiki production nəticəsi
+
+İstifadəçinin `talkmart-performance-cutover.mjs --apply` çıxışında bütün mərhələlər keçib. Tam canlı backup `/root/talkmart-backups/performance-live-20261110-KrQjHY` altındadır. Qeyd olunan nəticələr: kod/env/PM2/nginx/MongoDB/private media backup-ı; dependency/index keçidi; mövcud user/video ID-lərinin qorunması; yeni worker heartbeat; köhnə signing konfiqurasiyası ilə auth; public feed və Range; həm direct init-in aktivliyi, həm legacy multipart yolunun saxlanması. JWT/OTP/DB/xidmət açarları və test proseslərinin PID-ləri qorunub. PM2 vəziyyəti saxlanıb, systemd xidməti aktivdir. Remote backup manifesti ayrıca yüklənməyib; daxili nəticələr istifadəçi çıxışına əsaslanır.
+
+Əlavə müstəqil, read-only HTTP yoxlamasında health və categories 200; guest feed 200 və iki nümunədə əlaqə məlumatlarının gizlənməsi; public-video detail 200; nümunə MP4 üçün Range 206, düzgün content-range/1024 byte/video-mp4; Swagger-də OpenAPI 1.3.0 və yeni direct yollar təsdiqlənib. Nümunə video `6ade1e88116857e9439cca67`, tam ölçüsü 5,891,416 byte-dır. Report `tmp/deployment/production-performance-public-result.json`-dır. HTTP yoxlaması dəqiq Git commit-i ayrıca oxumur; commit `740c57e...` daxili cutover çıxışı ilə təsdiqlənir.
+
+Canlı API base `https://api.talkmart.az/api`, canlı Swagger `https://api.talkmart.az/api-docs/`-dur. Staging ayrıca qalır. [Flutter buraxılış təlimatı](PRODUCTION_FLUTTER_HANDOFF_2026-11-10_AZ.md) canlı/test ünvanları və qalan APK qəbul sınaqlarını verir. Canlıya keçiddən sonra real tətbiqdən controlled upload/AI/playback sınağı hələ aparılmayıb; avtomatik helper application test videosu və ya hesab yaratmayıb. Backend deployment tamamlanıb, iki PDF-dəki bütün performans hədəflərinin və Flutter problemlərinin həll edildiyi iddia edilmir.

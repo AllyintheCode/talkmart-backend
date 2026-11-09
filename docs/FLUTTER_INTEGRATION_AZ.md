@@ -1,14 +1,16 @@
-# Flutter üçün Talkmart test API təlimatı
+# Flutter üçün Talkmart API təlimatı
 
-9 noyabr vəziyyəti: aşağıdakı [private preview bölməsi](#private-preview-lokal-optimizasiya-buraxılışı) test serverində tətbiq olunub. İstifadəçi mövcud APK-də səssiz/səsli oynatma, seek və 11 dəqiqədən sonra sahibin videosunun yenidən açılması axınını təsdiqləyib.
+10 noyabr: hazır backend optimizasiyaları və direct-upload API/worker canlıya `740c57e09cb9e25439d994a1ed8ae0fa527e7b8f` ilə keçirilib. Aşağıdakı [private preview bölməsi](#private-preview-lokal-optimizasiya-buraxılışı) hər iki backend mühitində qüvvədədir. İlk APK playback sınaqları uğurlu olsa da sonra aralıq oynatma və app bağlananda sessiyanın itməsi bildirilib; [canlı Flutter təlimatı](PRODUCTION_FLUTTER_HANDOFF_2026-11-10_AZ.md) qalan qəbul işlərini göstərir.
 
-Backend optimizasiyaları hazırda test mühitindədir. Giriş, provider video yükləməsi, emal, AI təsdiqi, oynatma, bəyənmə/yadda saxlama və admin moderasiyası real serverdə yoxlanılıb. Ayrıca [hissəli birbaşa R2 upload müqaviləsi](FLUTTER_DIRECT_UPLOAD_AZ.md) yeni lokal mərhələdir; onun real R2 yoxlaması, test backend buraxılışı və Flutter inteqrasiyası hələ gözlənilir. Hazırkı APK multipart yolunu istifadə etməyə davam edir.
+Giriş, provider video yükləməsi, emal, AI təsdiqi, oynatma, bəyənmə/yadda saxlama və admin moderasiyası test serverində yoxlanılıb. [Hissəli birbaşa R2 upload müqaviləsi](FLUTTER_DIRECT_UPLOAD_AZ.md) üçün real R2 və server iş axını keçib; Flutter inteqrasiyası və mobil resume qalıb. Mövcud multipart yolu saxlanılıb.
 
 - Test base URL: `https://api.talkmart.az/test-api/api`
 - Swagger: `https://api.talkmart.az/test-api/api-docs/`
 - Tam giriş URL nümunəsi: `https://api.talkmart.az/test-api/api/auth/login`
+- Canlı base URL: `https://api.talkmart.az/api`
+- Canlı Swagger: `https://api.talkmart.az/api-docs/`
 
-Aşağıdakı endpoint yolları test base URL-ə əlavə olunur. Test build-in faktiki sorğu ünvanını tam giriş URL nümunəsi ilə yoxlayın. User və provider girişləri ayrıca paylaşılmalıdır; onları mənbə koduna yazmayın. Test hesablarının email və nömrələri sintetikdir. Qeydiyyat, OTP, real əlaqə və silinmə sınaqları üçün ayrıca test hesabı istifadə edin.
+Aşağıdakı endpoint yolları build-in seçilmiş base URL-inə əlavə olunur. Test build-in faktiki sorğu ünvanını tam test giriş URL nümunəsi ilə yoxlayın. Mühitlərin hesab/ID/token-lərini qarışdırmayın. User və provider girişləri ayrıca paylaşılmalıdır; onları mənbə koduna yazmayın. Test hesablarının email və nömrələri sintetikdir. Qeydiyyat, OTP, real əlaqə və silinmə sınaqları üçün ayrıca test hesabı istifadə edin.
 
 1. **Sessiya və şifrə sıfırlama.** Login cavabındakı `token` access token-dir; normal müddəti yeddi gündür. Təhlükəsiz daimi yaddaşa yazın, startup-da yaddaş oxunması tamamlandıqdan sonra auth vəziyyətini bərpa edin və qorunan sorğularda `Authorization: Bearer <token>` göndərin. App-i bağlamaq logout deyil. Təsdiqlənmiş auth rəddi (`SESSION_REVOKED` və ya JWT validation uğursuzluğu) yenidən giriş tələb edə bilər; `TOKEN_MISSING` üçün startup/header sırasını araşdırın. Timeout/offline/`5xx` və media xətalarını logout-a çevirməyin. Ayrı refresh-token endpoint-i yoxdur. [Sessiya bərpası diaqnostikası](FLUTTER_SESSION_RESTORE_AZ.md) detalları verir. Forgot-password axınındakı `resetToken` yalnız `POST /auth/forgot-password/reset-password` gövdəsində `{resetToken,newPassword}` üçün istifadə olunur. Reset tamamlananda yenidən login edin.
 

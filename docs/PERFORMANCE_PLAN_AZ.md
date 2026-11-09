@@ -1,8 +1,8 @@
 # Performans planının təhlili və lokal ölçmə
 
-Ən son vəziyyət: [9 noyabr paralel HTTP upload hesabatı](PERFORMANCE_PARALLEL_UPLOAD_2026-11-09.md), [server AI/media və APK nəticələri](PERFORMANCE_AI_SAMPLING_2026-11-09.md). Aşağıdakı müqayisə ilkin vəziyyətin və yol xəritəsinin qeydidir.
+Ən son vəziyyət: [10 noyabr production buraxılışı](PRODUCTION_PERFORMANCE_RELEASE_2026-11-10_AZ.md) tamamlanıb; [qalan Flutter işləri](PRODUCTION_FLUTTER_HANDOFF_2026-11-10_AZ.md) və ölçmə hədəfləri ayrılıqda saxlanır. Əvvəlki [9 noyabr paralel HTTP upload hesabatı](PERFORMANCE_PARALLEL_UPLOAD_2026-11-09.md), [server AI/media və APK nəticələri](PERFORMANCE_AI_SAMPLING_2026-11-09.md) müqayisə materialıdır. Aşağıdakı müqayisə ilkin vəziyyətin və yol xəritəsinin qeydidir.
 
-Növbəti lokal mərhələ: [birbaşa hissəli R2 upload backend-i](DIRECT_UPLOAD_IMPLEMENTATION_2026-11-09.md) hazırlanıb, standart olaraq bağlıdır. Real test R2 preflight, test API/worker buraxılışı və yeni Flutter axını hələ gözlənilir.
+[Birbaşa hissəli R2 upload backend-i](DIRECT_UPLOAD_IMPLEMENTATION_2026-11-09.md) həm staging, həm production-da aktivdir. Real R2/server sınaqları keçib; yeni mobil axının Flutter inteqrasiyası və APK problemlərinin düzəlişi qalır. PDF-in bütün SLO və yük hədəfləri keçmiş sayılmır.
 
 Mənbə: `Talkmart_Backend_Performans_Optimizasiya_Plani_2026-10-25.pdf`, 15 səhifə. Müqayisə bazası: canlıya çıxmış `94cc79d5d57365fcd41aeecb576587e49dcc19b3`. Sənəddəki vaxtlar və prioritetlər təklifdir; hazırkı sistemin ölçülmüş nəticəsi deyil.
 
