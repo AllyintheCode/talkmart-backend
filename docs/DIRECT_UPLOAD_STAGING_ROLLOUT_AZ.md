@@ -2,7 +2,7 @@
 
 9 noyabr 2026: real test R2 uyğunluq sınağı istifadəçinin server çıxışı ilə keçib. Yanlış ölçülü imzalı hissə və vaxtı bitmiş URL rədd edilib; multipart/HEAD/private metadata və byte hash-i uyğundur; tamamlanmış source köhnə part URL ilə dəyişdirilə bilmir. Sınağın öz object/MPU-ları silinib, test və production PID-ləri saxlanıb. Hesabat: `tmp/direct-r2-preflight-8b97c5c4-bb1b-44f0-9bd2-11696a120cd1.json`.
 
-Yeni backend hələ aktiv deyil. Cari server bazası `ffc1c33b193f9a6b31a8457cfab8482ffb8e75cb`-dir. Hazırlanan paket `codex/performance-baseline` branch-inin yoxlanmış yeni commit-inə fast-forward keçidi üçündür. Production qovluğu, env, DB və proses adları hədəf ola bilməz.
+Keçid tamamlanıb: test buraxılışı `73de3a9f5447db17e0d4ffb4b0e1e9c5cfd0814b`, əvvəlki baza `ffc1c33b193f9a6b31a8457cfab8482ffb8e75cb`-dir. Ehtiyat nüsxə `/root/talkmart-backups/direct-staging-2026-11-09T17-11-08-827Z-nuNvzB` altında saxlanıb. Production PID-ləri dəyişməyib. Real upload/resume/complete və ilk worker/AI nəticəsi [ayrıca hesabatdadır](DIRECT_UPLOAD_STAGING_RESULT_2026-11-09.md). Aşağıdakı ardıcıllıq hazırlanmış paketə aiddir; artıq keçmiş helper-i yenidən işlətmək üçün göstəriş deyil.
 
 ## Paket və guard-lar
 
@@ -30,7 +30,7 @@ Yeni API direct upload qəbul etmiş ola bilərsə köhnə worker-ə avtomatik d
 
 İstənilən uğursuz nəticədə helper-i kor-koranə təkrar işlətməyin. Backup manifestində son mərhələ və admission sərhədi var. Yeni sessiyalar tamamlanıb/ləğv olunmalı və növbə boşalmalıdır. Tam DB/media restore backup-dan sonrakı test dəyişikliklərini geri alacağı üçün ayrıca qiymətləndirilən əməliyyatdır; bu aktivləşdirmə helper-i onu avtomatik etmir.
 
-Lokal doğrulama: manifest/path, env dəyərlərinin qorunması, operator edit-i və admission sonrası rollback guard-ı üçün dörd, upload sınağının R2 scope-u üçün iki yeni unit testi. Source check, ümumilikdə 41 unit/media/performance/staging və 50 integration testi keçib: cəmi 91 test. Mövcud functional testlər real R2 sınağının yerinə təqdim edilmir. Faktiki Linux keçidi və post-deploy direct upload nəticələri bu sənədə sonradan əlavə olunacaq.
+Lokal doğrulama: manifest/path, env dəyərlərinin qorunması, operator edit-i və admission sonrası rollback guard-ı üçün dörd, upload sınağının R2 scope-u üçün iki yeni unit testi. Source check, ümumilikdə 41 unit/media/performance/staging və 50 integration testi keçib: cəmi 91 test. Mövcud functional testlər real R2 sınağının yerinə təqdim edilmir. Faktiki Linux keçidi və post-deploy direct upload nəticələri [nəticə sənədindədir](DIRECT_UPLOAD_STAGING_RESULT_2026-11-09.md).
 
 ## Keçiddən sonrakı orijinal upload sınağı
 

@@ -1,6 +1,6 @@
 # Birbaşa R2 upload — lokal backend, 9 noyabr 2026
 
-Bu mərhələ kodu yalnız lokal `codex/performance-baseline` branch-dədir. Staging hazırda `ffc1c33`, production isə əvvəlki audit buraxılışıdır. Yeni yol `DIRECT_UPLOAD_ENABLED=false` ilə standart olaraq bağlıdır. Mövcud multipart APK yolu, video status adları və public görünürlük qaydaları saxlanılıb. Yeni API/worker hələ serverə tətbiq edilməyib.
+Yeni API/worker yalnız staging-də `73de3a9f5447db17e0d4ffb4b0e1e9c5cfd0814b` buraxılışı ilə aktivləşdirilib; production əvvəlki audit buraxılışındadır. Yeni yol `DIRECT_UPLOAD_ENABLED=false` ilə standart olaraq bağlıdır, yalnız staging env-də açılıb. Mövcud multipart APK yolu, video status adları və public görünürlük qaydaları saxlanılıb. Real R2 transfer/resume/complete və ilk worker/AI işi keçib; [faktiki nəticə və qalan yoxlamalar](DIRECT_UPLOAD_STAGING_RESULT_2026-11-09.md) ayrıca qeyd olunub.
 
 ## Yeni axın və məlumatlar
 
@@ -40,7 +40,7 @@ Standalone `tmp/deployment/direct-r2-preflight.mjs` yalnız test serverinin `tmp
 
 Bu preflight application DB-yə yazmır, `.env` dəyişmir, proses restart etmir və yeni feature-i açmır. Signed URL və credential stdout-a yazılmır. O, həqiqi R2 imza/MPU davranışı üçündür; yeni API-nin real R2 ilə end-to-end yük sınağının əvəzi deyil.
 
-Real server nəticəsi alınıb: yeddi yoxlamanın hamısı keçib, sınaq object/MPU-ları silinib və bütün API/worker PID-ləri saxlanıb. Report: `tmp/direct-r2-preflight-8b97c5c4-bb1b-44f0-9bd2-11696a120cd1.json`. Növbəti konkret mərhələ [test API/worker keçididir](DIRECT_UPLOAD_STAGING_ROLLOUT_AZ.md); hələ icra olunmayıb.
+Real server nəticəsi alınıb: yeddi yoxlamanın hamısı keçib, sınaq object/MPU-ları silinib və bütün API/worker PID-ləri saxlanıb. Report: `tmp/direct-r2-preflight-8b97c5c4-bb1b-44f0-9bd2-11696a120cd1.json`. Sonra [test API/worker keçidi](DIRECT_UPLOAD_STAGING_ROLLOUT_AZ.md) və real upload/worker işi də keçib. [Nəticə](DIRECT_UPLOAD_STAGING_RESULT_2026-11-09.md) telefon playback/resume və performans hədəflərinin hələ qaldığını ayrıca göstərir.
 
 Preflight keçəndən sonra ayrıca test kod/env backup-ı ilə API və worker birlikdə yenilənməli, yalnız staging-də feature açılmalıdır. Worker yeni direct job-ların müddətini probe ilə doldurmalıdır. Aktiv direct sessiyalar və ya yeni queued job-lar varkən köhnə worker-ə kor-koranə rollback olmaz: əvvəl yeni init bağlanır, yeni kodla sessiyalar tamamlanır/ləğv olunur və növbə boşaldılır. Bundan sonra Flutter və 20/35/50 MB müqayisəsi aparılır. Init `<300 ms`, API RSS azalması və real model/R2 p95 hələ ölçülmüş təminat deyil.
 
