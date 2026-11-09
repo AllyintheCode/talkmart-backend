@@ -32,7 +32,7 @@ Ssenarilər: opt-in/verified-provider/token tipi/sahiblik, metadata və ölçü 
 
 Son direct dəsti **20 ssenaridən** ibarətdir. Yuxarıdakı 35 unit və 30 əvvəlki integration ilə birlikdə **85 test keçib**. Sonrakı aktivləşdirmə/upload helper-lərinə altı guard testi əlavə edilib; yekun source check, **41 unit və 50 integration — 91 test** keçib. Init retry ilə tamamlanma yarışında cavab forması saxlanır; yanlış/sonsuz/mənfi kvota konfiqurasiyası limitləri səssizcə ləğv etmir. İki OpenAPI mənbəyinin eyniliyi yoxlanıb. Lokal guard yoxlaması standalone R2 script-in Windows workspace-dən servis açmadan dayanmasını təsdiqləyib. Bu lokal testlərdən əlavə real Cloudflare preflight nəticəsi aşağıda ayrıca göstərilir.
 
-OpenAPI 1.3.0 hər iki mənbədə yenilənib. [Flutter müqaviləsi](FLUTTER_DIRECT_UPLOAD_AZ.md) sorğu nümunələrini, hissə offset-lərini, progress/resume/cancel/retry və səhv kodlarını verir. Test API/worker aktivləşib real upload keçənə qədər Flutter buraxılışını bu yola keçirmək tələb olunmur.
+OpenAPI 1.3.0 hər iki mənbədə yenilənib. [Flutter müqaviləsi](FLUTTER_DIRECT_UPLOAD_AZ.md) sorğu nümunələrini, hissə offset-lərini, progress/resume/cancel/retry və səhv kodlarını verir. Test API/worker aktivdir, real upload keçib. Telefonda ilk playback/seek uğurlu olsa da sonradan user lentində aralıq oynatma problemi bildirilib; [diaqnostika](FLUTTER_PLAYBACK_DIAGNOSTICS_AZ.md) açıqdır. Bu problem həll olunduqdan sonra yeni axının test APK-də qoşulması və mobil resume sınaqları davam edir. Production-a bu mərhələdə keçilmir.
 
 ## Növbəti addım: R2 uyğunluğu
 

@@ -45,6 +45,6 @@ AI kadrları və model birlikdə `<5 s` hədəfini bu müşahidədə ödəmir. �
 
 ## Qalan yoxlamalar
 
-Bu video üçün test APK playback və irəli/geri sarılma nəticəsi hələ gözlənilir. Mövcud APK-də bu videonun oynadılması Flutter-in yeni direct upload/resume yolunu artıq istifadə etdiyini sübut etmir. Flutter dəyişiklikləri [müqaviləyə](FLUTTER_DIRECT_UPLOAD_AZ.md) uyğun ayrıca tətbiq və sınaq tələb edir.
+İstifadəçi əvvəlcə test APK-də “PERF direct təmizlik” videosunun normal oynadığını və irəli/geri sarıldığını təsdiqləyib. Sonra user lentində oynatmanın aralıq nasaz olduğunu, direct videonun işlədiyini, “PERF səsli təmizlik” videosunun isə bəzən işləmədiyini bildirib. Hər iki nümunənin eyni telefonda brauzerdə işləməsi təsdiqlənib. Oynatma sabitliyi üzrə [açıq diaqnostika](FLUTTER_PLAYBACK_DIAGNOSTICS_AZ.md) var; ilk uğurlu sınaq yekun mobil qəbul deyil. Cihaz/şəbəkə trace-i alınmayıb. Mövcud APK-də videonun oynadılması Flutter-in yeni direct upload/resume yolunu artıq istifadə etdiyini sübut etmir. Flutter dəyişiklikləri [müqaviləyə](FLUTTER_DIRECT_UPLOAD_AZ.md) uyğun ayrıca tətbiq və sınaq tələb edir.
 
 Qalan işlər: telefon şəbəkəsində direct upload/progress, tətbiqi bağlayıb açaraq resume, expiry/cancel/retry; eyni şərtlərlə 20/35/50 MB və paralel provider ölçmələri; API RSS və worker yükü; init/AI gecikmə hədəfləri. Production-a bu mərhələdə keçilməyib.
