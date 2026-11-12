@@ -324,10 +324,6 @@ export const getExploreVideos = async (req, res) => {
     const userId = req.user?._id || null;
 
     const { categoryId, search, sort, location, minPrice, maxPrice } = req.query;
-    const { providerId } = req.query;
-    if (providerId !== undefined && !isValidObjectId(providerId)) {
-      return fail(res, 400, "INVALID_PROVIDER", "Provider ID formatı yanlışdır.");
-    }
 
     let blockedIds = [];
     if (userId) {
@@ -342,11 +338,8 @@ export const getExploreVideos = async (req, res) => {
 
     const matchStage = { ...publicVideoFilter(), ...cursorFilter(req.query.cursor) };
     if (matchStage.$or) matchStage.$or[1]._id.$lt = new mongoose.Types.ObjectId(matchStage.$or[1]._id.$lt);
-    if (providerId || blockedIds.length > 0) {
-      matchStage.providerId = {
-        ...(providerId ? { $eq: new mongoose.Types.ObjectId(String(providerId)) } : {}),
-        ...(blockedIds.length > 0 ? { $nin: blockedIds } : {}),
-      };
+    if (blockedIds.length > 0) {
+      matchStage.providerId = { $nin: blockedIds };
     }
 
 

@@ -1489,18 +1489,12 @@ export default {
     "/videos/explore": {
       "get": {
         "summary": "Kəşf Et (Explore) səhifəsi üçün kateqoriyalı və axtarışlı list",
-        "description": "Guest baxa bilər. Hər video providerin ictimai məlumatları, sayğaclar və isLiked/isSaved ilə qaytarılır. Əlaqə məlumatları üçün tokenlə /users/provider/{id}/contact istifadə edin. providerId seçilmiş providerin videolarını səhifələmədən əvvəl filtrləyir. total, page, totalPages və nextCursor saxlanılır; sahibin görünürlük və bloklama qaydaları tətbiq edilir.",
+        "description": "🔓 **GUEST DOSTu** — Token olmadan da işləyir. Login olmamış istifadəçilər sərbəst axtarış edə bilər.\n\n📦 **BİRLƏŞDİRİLMİŞ API** — Hər video ilə birlikdə provider telefon nömrəsi, likeCount, saveCount, viewCount, isLiked, isSaved hamısı bir response-da qaytarılır. Ayrıca `/engagement` və ya `/contact` çağırmağa ehtiyac yoxdur.\n\nKeeps total, page, totalPages, nextCursor, filters and personal flags. Bounded owner counting avoids per-video owner lookups across the entire matching set; owner visibility is rechecked on returned items.",
         "tags": [
           "Video"
         ],
         "security": [],
         "parameters": [
-          {
-            "in": "query",
-            "name": "providerId",
-            "schema": { "type": "string", "pattern": "^[a-fA-F0-9]{24}$" },
-            "description": "Yalnız bu providerin ictimai videoları"
-          },
           {
             "in": "query",
             "name": "categoryId",
