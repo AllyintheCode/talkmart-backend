@@ -318,7 +318,7 @@ export const getAllUsers = async (req, res) => {
   if (req.query.verified !== undefined) filter["providerProfile.verified"] = req.query.verified === "true";
   if (search) filter.fullName = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
   const [users, total] = await Promise.all([
-    User.find({ $and: [filter, cursorFilter(req.query.cursor)] }).select("fullName role profileImage emailVerified isBlocked accountStatus providerProfile.verified createdAt")
+    User.find({ $and: [filter, cursorFilter(req.query.cursor)] }).select("fullName email phone role profileImage emailVerified isBlocked accountStatus providerProfile.verified createdAt")
       .sort({ createdAt: -1, _id: -1 }).skip(skip).limit(limit).maxTimeMS(5000).lean(),
     User.countDocuments(filter).maxTimeMS(5000),
   ]);

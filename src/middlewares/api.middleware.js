@@ -34,7 +34,7 @@ export function validateQuery(req, res, next) {
   for (const [key, value] of Object.entries(req.query)) {
     if (typeof value !== "string" || value.length > (key === "cursor" ? 300 : 100)) return invalid(`Invalid ${key}`);
     if (enums[key] && !enums[key].includes(value)) return invalid(`Invalid ${key}`);
-    if (key === "categoryId" && !isValidObjectId(value)) return invalid("Invalid categoryId");
+    if (["categoryId", "providerId"].includes(key) && !isValidObjectId(value)) return invalid(`Invalid ${key}`);
     if (["minPrice", "maxPrice"].includes(key) && (!value.trim() || !Number.isFinite(Number(value)) || Number(value) < 0)) return invalid(`Invalid ${key}`);
   }
   if (req.query.minPrice !== undefined && req.query.maxPrice !== undefined && Number(req.query.minPrice) > Number(req.query.maxPrice)) return invalid("Invalid price range");
