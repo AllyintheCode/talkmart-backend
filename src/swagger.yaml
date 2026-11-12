@@ -877,6 +877,8 @@ paths:
       description: >
         GUEST DOSTu — Token olmadan da işləyir.
         BİRLƏŞDİRİLMİŞ API — provider phone, isLiked, isSaved hamısı bir response-da.
+        Provider profili üçün providerId=video.provider._id göndərin.
+        Provider filtri sayma və səhifələmədən əvvəl tətbiq edilir; limit=100 dəstəklənir.
       tags: [Video]
       security: []
       parameters:
@@ -895,6 +897,12 @@ paths:
           schema:
             type: string
           description: Kateqoriya filteri (ObjectId)
+        - in: query
+          name: providerId
+          schema:
+            type: string
+            pattern: '^[a-fA-F0-9]{24}$'
+          description: Yalnız bu providerin videoları; video.provider._id dəyəri
         - in: query
           name: search
           schema:

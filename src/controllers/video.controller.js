@@ -342,7 +342,10 @@ export const getExploreVideos = async (req, res) => {
     const skip = (page - 1) * limit;
     const userId = req.user?._id || null;
 
-    const { categoryId, search, sort, location, minPrice, maxPrice } = req.query;
+    const { categoryId, search, sort, location, minPrice, maxPrice, providerId } = req.query;
+    if (providerId !== undefined && (typeof providerId !== "string" || !mongoose.isValidObjectId(providerId))) {
+      return res.status(400).json({ error: "INVALID_PROVIDER", message: "Provider ID formatı yanlışdır." });
+    }
 
     let blockedIds = [];
     if (userId) {
@@ -356,8 +359,11 @@ export const getExploreVideos = async (req, res) => {
     }
 
     const matchStage = { status: "active" };
-    if (blockedIds.length > 0) {
-      matchStage.providerId = { $nin: blockedIds };
+    if (providerId || blockedIds.length > 0) {
+      matchStage.providerId = {
+        ...(providerId ? { $eq: new mongoose.Types.ObjectId(providerId) } : {}),
+        ...(blockedIds.length > 0 ? { $nin: blockedIds } : {}),
+      };
     }
 
 

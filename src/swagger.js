@@ -1303,7 +1303,7 @@ export default {
     "/videos/explore": {
       "get": {
         "summary": "Kəşf Et (Explore) səhifəsi üçün kateqoriyalı və axtarışlı list",
-        "description": "🔓 **GUEST DOSTu** — Token olmadan da işləyir. Login olmamış istifadəçilər sərbəst axtarış edə bilər.\n\n📦 **BİRLƏŞDİRİLMİŞ API** — Hər video ilə birlikdə provider telefon nömrəsi, likeCount, saveCount, viewCount, isLiked, isSaved hamısı bir response-da qaytarılır. Ayrıca `/engagement` və ya `/contact` çağırmağa ehtiyac yoxdur.",
+        "description": "🔓 **GUEST DOSTu** — Token olmadan da işləyir. Login olmamış istifadəçilər sərbəst axtarış edə bilər.\n\n📦 **BİRLƏŞDİRİLMİŞ API** — Hər video ilə birlikdə provider telefon nömrəsi, likeCount, saveCount, viewCount, isLiked, isSaved hamısı bir response-da qaytarılır. Ayrıca `/engagement` və ya `/contact` çağırmağa ehtiyac yoxdur.\n\nProvider profili üçün providerId=video.provider._id göndərin. Provider filtri sayma və səhifələmədən əvvəl tətbiq edilir; limit=100 dəstəklənir.",
         "tags": [
           "Video"
         ],
@@ -1326,6 +1326,15 @@ export default {
               "default": 15
             },
             "description": "Hər səhifədəki video sayı"
+          },
+          {
+            "in": "query",
+            "name": "providerId",
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-fA-F0-9]{24}$"
+            },
+            "description": "Yalnız bu providerin videoları; video.provider._id dəyəri"
           },
           {
             "in": "query",
