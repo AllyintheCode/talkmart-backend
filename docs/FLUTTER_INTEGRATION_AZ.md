@@ -29,7 +29,9 @@ Aşağıdakı endpoint yolları build-in seçilmiş base URL-inə əlavə olunur
 
 7. **Əlaqə və WhatsApp.** Lentdən telefon və ünvan oxumağa əsaslanmayın. Əlaqə üçün tokenlə `GET /users/provider/{id}/contact` çağırın; guest-i girişə yönləndirin. `GET /users/provider/{id}/whatsapp` da token tələb edir və `302` qaytarır. Tokenli API sorğusunun `Location` ünvanı açılmalıdır.
 
-8. **Siyahılar və silinmə.** `page` / `limit` istifadə edin; maksimum `limit=50`. `nextCursor` qaytaran endpointlərdə sonrakı səhifəyə həmin `cursor` ilə davam edin. `DELETE /videos/{id}` və `DELETE /users/account` silinməni qəbul edəndə UI-dən müvafiq elementi çıxarın; hesab silinirsə sessiyanı təmizləyin. Server media və əlaqəli məlumatları fonda təmizləyir.
+8. **Siyahılar və silinmə.** `page` / `limit` istifadə edin; Explore üçün maksimum `limit=100`, digər siyahılar üçün maksimum `limit=50`. `nextCursor` qaytaran endpointlərdə sonrakı səhifəyə həmin `cursor` ilə davam edin. `DELETE /videos/{id}` və `DELETE /users/account` silinməni qəbul edəndə UI-dən müvafiq elementi çıxarın; hesab silinirsə sessiyanı təmizləyin. Server media və əlaqəli məlumatları fonda təmizləyir.
+
+   **Provider profili üçün hazırlanmış backend düzəlişi (13 noyabr).** Mövcud `GET /videos/explore?providerId={id}&page=1&limit=100&sort=newest` sorğusu seçilmiş providerin ictimai videolarını səhifələnmiş qaytarır; `{id}` lentdəki `video.provider._id` dəyəridir. Provider filtri sayma və səhifələmədən əvvəl tətbiq olunur. Hazır/approved/active media, sahibin görünürlük qaydaları və ikitərəfli bloklama saxlanılır. `provider` kimi əlavə parametr tələb edilmir; mövcud tətbiqin göndərdiyi əlavə `provider` parametri qəbul olunur, seçim `providerId` ilə edilir. Düzəliş hazırlanıb, canlı serverə tətbiq edilməyib.
 
 Tətbiqdə sınaq ardıcıllığı: guest lent və video oynatma → user login → like/unlike və save/unsave → əlaqə və WhatsApp → provider login və upload → statusların yenilənməsi → OTP və şifrə sıfırlama → ayrıca test hesabında silinmə.
 

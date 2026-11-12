@@ -6,7 +6,7 @@ import jwt from "jsonwebtoken";
 import { signAccessToken, verifyAccessToken, signPasswordResetToken, verifyPasswordResetToken } from "../src/utils/jwt.js";
 import { generateOtpCode, hashOtp, verifyOtpHash } from "../src/utils/otp.js";
 import { redact } from "../src/utils/logger.js";
-import { parsePagination } from "../src/utils/pagination.js";
+import { parsePagination, explorePaginationSchema } from "../src/utils/pagination.js";
 import { parseModerationResult, validateVideoContentAI } from "../src/services/aiModeration.service.js";
 import { canPublishVideo } from "../src/services/videoState.service.js";
 import { anonymousViewer } from "../src/controllers/engagement.controller.js";
@@ -52,6 +52,12 @@ test("structured logger redacts credentials, authorization, email and OTP in err
 test("pagination rejects negative, huge, fractional and long search inputs", () => {
   for (const query of [{ page: -1 }, { limit: 999999 }, { limit: 1.2 }, { page: 10000, limit: 50 }, { search: "a".repeat(101) }]) assert.throws(() => parsePagination(query));
   assert.deepEqual(parsePagination({ page: "2", limit: "10" }), { page: 2, limit: 10, search: undefined, skip: 10 });
+  assert.throws(() => parsePagination({ limit: 100 }));
+  assert.deepEqual(parsePagination({}, {}, explorePaginationSchema), { page: 1, limit: 15, search: undefined, skip: 0 });
+  assert.deepEqual(parsePagination({ page: "2", limit: "100" }, { limit: 15 }, explorePaginationSchema), { page: 2, limit: 100, search: undefined, skip: 100 });
+  for (const query of [{ limit: 101 }, { limit: 0 }, { limit: 1.2 }, { page: 102, limit: 100 }]) {
+    assert.throws(() => parsePagination(query, { limit: 15 }, explorePaginationSchema));
+  }
 });
 test("AI malformed, partial and ambiguous responses never approve", async () => {
   const valid = { serviceProvided: "Cleaning", matchesCategory: true, hasBannedContent: false, confidenceScore: 95, reasoning: "Visible service" };

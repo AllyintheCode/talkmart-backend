@@ -9,7 +9,7 @@ import { uploadFileToR2 } from "../services/r2Upload.service.js";
 import { getQueueStats } from "../services/videoProcessing.service.js";
 import { validateUploadedVideo } from "../services/mediaProbe.service.js";
 import { deleteVideoCompletely } from "../services/videoCleanup.service.js";
-import { parsePagination, isValidObjectId, cursorFilter, nextCursor } from "../utils/pagination.js";
+import { parsePagination, explorePaginationSchema, isValidObjectId, cursorFilter, nextCursor } from "../utils/pagination.js";
 import { observe } from "../utils/metrics.js";
 import { publicVideoFilter, publicOwnerFilter } from "../services/videoState.service.js";
 import { fail } from "../utils/http.js";
@@ -317,13 +317,16 @@ export const getExploreVideos = async (req, res) => {
   try {
     let page, limit, skip;
     try {
-      ({ page, limit, skip } = parsePagination(req.query, { limit: 15 }));
+      ({ page, limit, skip } = parsePagination(req.query, { limit: 15 }, explorePaginationSchema));
     } catch (e) {
       return fail(res, 400, e.code || "INVALID_PAGINATION", e.message);
     }
     const userId = req.user?._id || null;
 
-    const { categoryId, search, sort, location, minPrice, maxPrice } = req.query;
+    const { categoryId, search, sort, location, minPrice, maxPrice, providerId } = req.query;
+    if (providerId !== undefined && !isValidObjectId(providerId)) {
+      return fail(res, 400, "INVALID_PROVIDER", "Provider ID formatı yanlışdır.");
+    }
 
     let blockedIds = [];
     if (userId) {
@@ -338,8 +341,11 @@ export const getExploreVideos = async (req, res) => {
 
     const matchStage = { ...publicVideoFilter(), ...cursorFilter(req.query.cursor) };
     if (matchStage.$or) matchStage.$or[1]._id.$lt = new mongoose.Types.ObjectId(matchStage.$or[1]._id.$lt);
-    if (blockedIds.length > 0) {
-      matchStage.providerId = { $nin: blockedIds };
+    if (providerId || blockedIds.length > 0) {
+      matchStage.providerId = {
+        ...(providerId ? { $eq: new mongoose.Types.ObjectId(String(providerId)) } : {}),
+        ...(blockedIds.length > 0 ? { $nin: blockedIds } : {}),
+      };
     }
 
 

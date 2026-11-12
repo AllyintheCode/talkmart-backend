@@ -6,10 +6,14 @@ export const paginationSchema = z.object({
   search: z.string().trim().max(100).optional(),
 });
 
-export function parsePagination(query, defaults = {}) {
-  const parsed = paginationSchema.safeParse({
-    page: query.page ?? defaults.page ?? 1,
-    limit: query.limit ?? defaults.limit ?? 20,
+export const explorePaginationSchema = paginationSchema.extend({
+  limit: z.coerce.number().int().min(1).max(100).default(15),
+});
+
+export function parsePagination(query, defaults = {}, schema = paginationSchema) {
+  const parsed = schema.safeParse({
+    page: query.page ?? defaults.page,
+    limit: query.limit ?? defaults.limit,
     search: query.search,
   });
 

@@ -244,6 +244,73 @@ test("admin user lists include email and phone without exposing authentication f
   }
 });
 
+test("explore accepts the mobile provider request and filters before pagination", async () => {
+  const other = await User.create({ fullName: "Other provider", role: "provider", email: "other@example.test", phone: "other", password: "unused",
+    emailVerified: true, providerProfile: { verified: true } });
+  const own = await Promise.all(Array.from({ length: 105 }, (_, index) => seedVideo({ createdAt: new Date(Date.UTC(2026, 0, 1) + index * 1000) })));
+  for (let index = 0; index < 6; index++) await seedVideo({ providerId: other._id, createdAt: new Date(Date.UTC(2026, 1, 1) + index * 1000) });
+  for (const fields of [{ status: "inactive" }, { moderationStatus: "rejected" }, { visibility: "hidden" }, { processingStatus: "processing" }, { videoUrl: "" }]) await seedVideo(fields);
+  const expected = [...own].reverse().map(video => String(video._id));
+  await VideoLike.create({ userId: user._id, videoId: own.at(-1)._id });
+  await VideoSave.create({ userId: user._id, videoId: own.at(-1)._id });
+  const query = `limit=100&sort=newest&providerId=${provider._id}&provider=${provider._id}`;
+  const first = await request(`/api/videos/explore?page=1&${query}`, { auth: token(user) });
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  assert.equal(first.body.count, 100);
+  assert.equal(first.body.total, 105);
+  assert.equal(first.body.totalPages, 2);
+  assert.deepEqual(first.body.videos.map(video => video._id), expected.slice(0, 100));
+  assert.ok(first.body.videos.every(video => video.provider._id === String(provider._id)));
+  assert.equal(first.body.videos[0].isLiked, true);
+  assert.equal(first.body.videos[0].isSaved, true);
+  assert.equal(first.body.videos[0].provider.email, undefined);
+  assert.equal(first.body.videos[0].provider.phone, undefined);
+  assert.ok(first.body.nextCursor);
+  const second = await request(`/api/videos/explore?page=2&${query}`);
+  assert.equal(second.status, 200);
+  assert.equal(second.body.total, 105);
+  assert.deepEqual(second.body.videos.map(video => video._id), expected.slice(100));
+  const cursor = await request(`/api/videos/explore?${query}&cursor=${first.body.nextCursor}`);
+  assert.equal(cursor.status, 200);
+  assert.deepEqual(cursor.body.videos.map(video => video._id), expected.slice(100));
+  for (const path of ["/api/videos/explore", "/api/videos/explore/", "/api/videos/EXPLORE"]) {
+    const result = await request(`${path}?limit=100`);
+    assert.equal(result.status, 200);
+    assert.equal(result.body.count, 100);
+    assert.equal(result.body.total, 111);
+  }
+});
+
+test("explore provider queries preserve visibility and reject invalid identifiers and limits", async () => {
+  await seedVideo();
+  await seedVideo({ providerId: admin._id });
+  const url = `/api/videos/explore?limit=100&providerId=${provider._id}`;
+  for (const fields of [{ isBlocked: true }, { accountStatus: "deleting" }, { emailVerified: false }]) {
+    await User.updateOne({ _id: provider._id }, { $set: { isBlocked: false, accountStatus: "active", emailVerified: true, ...fields } });
+    const result = await request(url);
+    assert.equal(result.status, 200);
+    assert.equal(result.body.total, 0);
+    assert.deepEqual(result.body.videos, []);
+  }
+  await User.updateOne({ _id: provider._id }, { $set: { emailVerified: true } });
+  await User.updateOne({ _id: user._id }, { $set: { blockedUsers: [provider._id] } });
+  assert.deepEqual((await request(url, { auth: token(user) })).body.videos, []);
+  await User.updateOne({ _id: user._id }, { $set: { blockedUsers: [] } });
+  await User.updateOne({ _id: provider._id }, { $set: { blockedUsers: [user._id] } });
+  assert.deepEqual((await request(url, { auth: token(user) })).body.videos, []);
+  assert.equal((await request(url)).body.videos.length, 1);
+  const missing = await request("/api/videos/explore?limit=100&providerId=000000000000000000000000");
+  assert.equal(missing.status, 200);
+  assert.equal(missing.body.total, 0);
+  assert.deepEqual(missing.body.videos, []);
+  for (const query of ["providerId=invalid", "providerId=", "providerId=bad&providerId=other", "limit=101", "limit=0", "limit=1.5", "page=102&limit=100"]) {
+    assert.equal((await request(`/api/videos/explore?${query}`)).status, 400, query);
+  }
+  for (const path of ["/api/videos/feed", "/api/videos/my-videos", "/api/videos/liked", "/api/admin/users"]) {
+    assert.equal((await request(`${path}?limit=100`, { auth: token(admin) })).status, 400, path);
+  }
+});
+
 test("explore keeps exact totals, ordering, filters, cursor and personal flags on the bounded owner path", async () => {
   await User.updateOne({ _id: provider._id }, { $set: { "providerProfile.address": "Baku [A]." } });
   const other = await User.create({ fullName: "Other provider", role: "provider", email: "other@example.test", phone: "other", password: "unused",

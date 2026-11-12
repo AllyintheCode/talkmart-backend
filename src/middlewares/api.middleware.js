@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { paginationSchema, isValidObjectId, cursorFilter } from "../utils/pagination.js";
+import { paginationSchema, explorePaginationSchema, isValidObjectId, cursorFilter } from "../utils/pagination.js";
 import { logger } from "../utils/logger.js";
 
 export function apiContract(req, res, next) {
@@ -34,7 +34,7 @@ export function validateQuery(req, res, next) {
   for (const [key, value] of Object.entries(req.query)) {
     if (typeof value !== "string" || value.length > (key === "cursor" ? 300 : 100)) return invalid(`Invalid ${key}`);
     if (enums[key] && !enums[key].includes(value)) return invalid(`Invalid ${key}`);
-    if (key === "categoryId" && !isValidObjectId(value)) return invalid("Invalid categoryId");
+    if (["categoryId", "providerId"].includes(key) && !isValidObjectId(value)) return invalid(`Invalid ${key}`);
     if (["minPrice", "maxPrice"].includes(key) && (!value.trim() || !Number.isFinite(Number(value)) || Number(value) < 0)) return invalid(`Invalid ${key}`);
   }
   if (req.query.minPrice !== undefined && req.query.maxPrice !== undefined && Number(req.query.minPrice) > Number(req.query.maxPrice)) return invalid("Invalid price range");
@@ -43,7 +43,9 @@ export function validateQuery(req, res, next) {
     if (req.query.sort && req.query.sort !== "newest") return invalid("Cursor requires newest sort");
     if (Number(req.query.page || 1) !== 1) return invalid("Cursor cannot be combined with page");
   }
-  if (!paginationSchema.safeParse(req.query).success || (Number(req.query.page || 1) - 1) * Number(req.query.limit || 20) > 10000) return invalid("Invalid pagination; use a narrower filter");
+  const schema = /^\/videos\/explore\/?$/i.test(req.path) ? explorePaginationSchema : paginationSchema;
+  const pagination = schema.safeParse(req.query);
+  if (!pagination.success || (pagination.data.page - 1) * pagination.data.limit > 10000) return invalid("Invalid pagination; use a narrower filter");
   next();
 }
 export function validateId(req, res, next, value) {
