@@ -2,7 +2,6 @@ import Onboarding from "../models/Onboarding.js";
 import Category from "../models/Category.js";
 import User from "../models/User.js";
 import Video from "../models/Video.js";
-import path from "path";
 import { uploadToR2, deleteFromR2 } from "../services/r2Upload.service.js";
 import { compressImage } from "../services/compress.service.js";
 import { invalidateAuthCache } from "../middlewares/auth.middleware.js";

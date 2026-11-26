@@ -1,7 +1,6 @@
 import User from "../models/User.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import path from "path";
 import Otp from "../models/Otp.js";
 import { sendEmailOtp } from "../utils/email.js";
 import { uploadToR2, deleteFromR2 } from "../services/r2Upload.service.js";

@@ -3,17 +3,10 @@ import mongoose from "mongoose";
 import Video from "../models/Video.js";
 import path from "path";
 import fs from "fs";
-import os from "os";
-import crypto from "crypto";
-import {
-  VideoLike,
-  VideoSave,
-} from "../models/VideoInteraction.js";
 import Category from "../models/Category.js";
 import { deleteFromR2 } from "../services/r2Upload.service.js";
 import { getVideoDuration } from "../services/compress.service.js";
 import { enqueueVideoProcessing, getQueueStats } from "../services/videoProcessing.service.js";
-import { validateVideoContentAI } from "../services/aiModeration.service.js";
 
 // POST /api/videos/upload
 export const createVideo = async (req, res) => {
@@ -45,12 +38,7 @@ export const createVideo = async (req, res) => {
     const originalExt = path.extname(req.file.originalname).toLowerCase() || ".mp4";
 
     // Multer diskStorage artıq faylı diskə yazıb (RAM-ı doldurmur)
-    let tempFilePath = req.file.path || null;
-    if (!tempFilePath && req.file.buffer) {
-      const tmpId = crypto.randomUUID();
-      tempFilePath = path.join(os.tmpdir(), `upload_${tmpId}${originalExt}`);
-      fs.writeFileSync(tempFilePath, req.file.buffer);
-    }
+    const tempFilePath = req.file.path;
 
     // Videonun uzunluğunu yoxla (Maks 5 dəqiqə = 300 saniyə)
     let duration = 0;

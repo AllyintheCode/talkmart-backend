@@ -151,7 +151,7 @@ export const extractKeyframes = async (filePath, count = 4, knownDuration = null
  * Kadrları bir grid şəklində birləşdirir (2 sütun, xronoloji: soldan sağa, yuxarıdan aşağı).
  * Bir şəkil = daha az token və daha sürətli cavab.
  */
-export const buildFrameGrid = async (frames) => {
+const buildFrameGrid = async (frames) => {
   if (frames.length === 1) return frames[0];
 
   const metas = await Promise.all(frames.map((f) => sharp(f).metadata()));
@@ -391,55 +391,5 @@ export const validateVideoContentAI = async ({
         await fileManager.deleteFile(uploadResult.file.name);
       } catch (_) {}
     }
-  }
-};
-
-/**
- * Mövcud videonu AI ilə yenidən analiz etmək (Manual / Test / Script üçün)
- */
-export const analyzeVideoWithAI = async (videoId) => {
-  try {
-    const Video = (await import("../models/Video.js")).default;
-    const Category = (await import("../models/Category.js")).default;
-    const video = await Video.findById(videoId);
-    if (!video) return;
-
-    const category = await Category.findById(video.categoryId);
-    const categoryName = category?.name || "Xidmət";
-
-    let targetPath = "";
-    let isTemp = false;
-
-    if (video.videoUrl) {
-      const response = await fetch(video.videoUrl);
-      const arrayBuffer = await response.arrayBuffer();
-      const tmpPath = path.join(os.tmpdir(), `recheck_${video._id}.mp4`);
-      fs.writeFileSync(tmpPath, Buffer.from(arrayBuffer));
-      targetPath = tmpPath;
-      isTemp = true;
-    }
-
-    if (targetPath) {
-      const result = await validateVideoContentAI({
-        tempFilePath: targetPath,
-        categoryName,
-        duration: video.duration,
-        title: video.title,
-        description: video.description,
-      });
-
-      video.moderationStatus = result.finalStatus;
-      video.aiFeedback = result.aiData?.reasoning || "";
-      video.aiConfidence = result.aiData?.confidenceScore || 0;
-      video.status = result.finalStatus === "approved" ? "active" : "inactive";
-      await video.save();
-
-      if (isTemp) {
-        try { fs.unlinkSync(targetPath); } catch (_) {}
-      }
-      return result;
-    }
-  } catch (err) {
-    console.error("analyzeVideoWithAI error:", err);
   }
 };
