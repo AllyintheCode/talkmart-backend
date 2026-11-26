@@ -96,6 +96,8 @@ export const createVideo = async (req, res) => {
       originalExt,
       categoryName: category.name,
       duration: Math.round(duration || 0),
+      title: video.title,
+      description: video.description,
     });
 
     const queueStats = getQueueStats();

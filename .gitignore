@@ -34,3 +34,6 @@ coverage/
 
 # temporary
 *.tmp
+# local working dirs
+tmp/
+output/

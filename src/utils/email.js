@@ -57,8 +57,6 @@ export async function sendEmailOtp(to, code, purpose = "login") {
   const title = titles[purpose] || "Təsdiq kodu";
   const currentYear = new Date().getFullYear();
 
-  console.log(`[OTP DEBUG] Sending OTP ${code} to ${to} for purpose: ${purpose}`);
-
   const htmlTemplate = `<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 <html xmlns="http://www.w3.org/1999/xhtml" lang="az" xml:lang="az">
 <head>

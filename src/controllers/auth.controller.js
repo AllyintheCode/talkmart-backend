@@ -8,6 +8,7 @@ import Category from "../models/Category.js";
 import { sendEmailOtp } from "../utils/email.js";
 import { signAccessToken } from "../utils/jwt.js";
 import mongoose from "mongoose";
+import { invalidateAuthCache } from "../middlewares/auth.middleware.js";
 
 const normalizeEmail = (e) =>
   String(e || "")
@@ -481,8 +482,16 @@ export async function resetPassword(req, res) {
     const user = await User.findById(payload.id);
     if (!user) return res.status(404).json({ error: "User tapılmadı" });
 
+    // Token şifrə dəyişməzdən əvvəl verilibsə (artıq istifadə olunubsa) rədd et
+    if (user.passwordChangedAt && payload.iat * 1000 < user.passwordChangedAt.getTime()) {
+      return res.status(400).json({ error: "Reset token artıq istifadə olunub" });
+    }
+
     user.password = await bcrypt.hash(parsed.data.newPassword, 10);
+    // Bütün köhnə sessiyaları (oğurlanmış tokenlər daxil) etibarsız et
+    user.passwordChangedAt = new Date();
     await user.save();
+    await invalidateAuthCache(user._id);
 
     return res.json({ message: "Şifrə uğurla yeniləndi" });
   } catch (e) {

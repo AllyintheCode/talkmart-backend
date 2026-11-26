@@ -111,4 +111,9 @@ export async function delCachePattern(pattern) {
   }
 }
 
+/**
+ * Redis hazırdırmı? (rate-limit store kimi başqa modullar üçün)
+ */
+export const isRedisReady = () => isRedisConnected && !!redis;
+
 export default redis;

@@ -52,7 +52,68 @@ export const compressImage = async (buffer) => {
  * @param {string} originalExt - Orijinal fayl uzantısı (.mp4, .mov, vs.)
  * @returns {{ buffer: Buffer, ext: string, mimetype: string }}
  */
-export const compressVideo = async (input, originalExt = ".mp4") => {
+// Remux (re-encode-suz) üçün hədlər — .env ilə dəyişdirilə bilər
+const MAX_VIDEO_DIMENSION = parseInt(process.env.MAX_VIDEO_DIMENSION || "1280", 10);
+const REMUX_MAX_BITRATE = parseInt(process.env.REMUX_MAX_BITRATE || "6000000", 10); // 6 Mbps
+
+const probe = (inputPath) =>
+  new Promise((resolve, reject) => {
+    ffmpeg.ffprobe(inputPath, (err, metadata) => (err ? reject(err) : resolve(metadata)));
+  });
+
+/**
+ * Video artıq web üçün uyğundursa (H.264 + yuv420p + AAC/səssiz, mp4/mov,
+ * ölçü və bitrate hədd daxilində) yenidən kodlaşdırmağa ehtiyac yoxdur — sadəcə remux.
+ */
+const canRemux = (metadata) => {
+  const streams = metadata?.streams || [];
+  const v = streams.find((s) => s.codec_type === "video");
+  const audios = streams.filter((s) => s.codec_type === "audio");
+  if (!v) return false;
+
+  const formatOk = /mp4|mov/.test(metadata?.format?.format_name || "");
+  const codecOk = v.codec_name === "h264" && v.pix_fmt === "yuv420p";
+  const audioOk = audios.every((a) => a.codec_name === "aac");
+  const sizeOk = Math.max(v.width || 0, v.height || 0) <= Math.max(MAX_VIDEO_DIMENSION, 1920);
+  const bitrate = Number(metadata?.format?.bit_rate) || Infinity;
+  const bitrateOk = bitrate <= REMUX_MAX_BITRATE;
+
+  return formatOk && codecOk && audioOk && sizeOk && bitrateOk;
+};
+
+const makeAbortError = () => {
+  const e = new Error("Video emalı ləğv edildi");
+  e.name = "AbortError";
+  return e;
+};
+
+// ffmpeg əmrini icra edir, signal abort olarsa prosesi dərhal öldürür
+const runFfmpeg = (command, outputPath, signal) =>
+  new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(makeAbortError());
+    const onAbort = () => {
+      try { command.kill("SIGKILL"); } catch (_) {}
+      reject(makeAbortError());
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    command
+      .on("end", () => {
+        signal?.removeEventListener("abort", onAbort);
+        resolve();
+      })
+      .on("error", (err) => {
+        signal?.removeEventListener("abort", onAbort);
+        reject(signal?.aborted ? makeAbortError() : err);
+      })
+      .save(outputPath);
+  });
+
+/**
+ * @param {Buffer|string} input
+ * @param {string} originalExt
+ * @param {{ signal?: AbortSignal }} [options] - signal abort olarsa ffmpeg dayandırılır
+ */
+export const compressVideo = async (input, originalExt = ".mp4", { signal } = {}) => {
   const tmpId = crypto.randomUUID();
   const tmpDir = os.tmpdir();
   let inputPath = "";
@@ -69,22 +130,50 @@ export const compressVideo = async (input, originalExt = ".mp4") => {
   const outputPath = path.join(tmpDir, `output_${tmpId}.mp4`);
 
   try {
-    await new Promise((resolve, reject) => {
-      ffmpeg(inputPath)
-        .videoCodec("libx264")       // H.264
-        .outputOptions([
-          "-crf 23",                  // Keyfiyyət: 23 idealdır
-          "-preset fast",             // Sürətli emal üçün optimallaşdırıldı (2-3x daha sürətli)
-          "-movflags +faststart",     // Web üçün progressive loading
-          "-pix_fmt yuv420p",         // Bütün player-lərlə uyğunluq
-        ])
-        .audioCodec("aac")           // AAC audio
-        .audioBitrate("128k")        // 128kbps keyfiyyətli audio
-        .format("mp4")
-        .on("end", resolve)
-        .on("error", reject)
-        .save(outputPath);
-    });
+    let done = false;
+
+    // 1. Sürətli yol: re-encode-suz remux (millisaniyələr)
+    try {
+      const metadata = await probe(inputPath);
+      if (canRemux(metadata)) {
+        await runFfmpeg(
+          ffmpeg(inputPath).outputOptions([
+            "-map 0:v:0",
+            "-map 0:a:0?",
+            "-c copy",
+            "-movflags +faststart",
+          ]).format("mp4"),
+          outputPath,
+          signal,
+        );
+        done = true;
+        console.log("⚡ Video remux edildi (re-encode lazım olmadı)");
+      }
+    } catch (remuxErr) {
+      if (remuxErr.name === "AbortError") throw remuxErr;
+      console.warn(`⚠️ Remux alınmadı, re-encode edilir: ${remuxErr.message}`);
+    }
+
+    // 2. Re-encode: veryfast + ölçü həddi (məs. 1080x1920 → 720x1280) + maks 30fps
+    if (!done) {
+      await runFfmpeg(
+        ffmpeg(inputPath)
+          .videoCodec("libx264")
+          .outputOptions([
+            "-crf 23",
+            "-preset veryfast",
+            `-vf scale='min(${MAX_VIDEO_DIMENSION},iw)':'min(${MAX_VIDEO_DIMENSION},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2`,
+            "-fpsmax 30",
+            "-movflags +faststart",
+            "-pix_fmt yuv420p",
+          ])
+          .audioCodec("aac")
+          .audioBitrate("128k")
+          .format("mp4"),
+        outputPath,
+        signal,
+      );
+    }
 
     const compressedBuffer = fs.readFileSync(outputPath);
 

@@ -82,7 +82,7 @@ const VideoSchema = new mongoose.Schema(
     // FFMPEG emal statusu
     processingStatus: {
       type: String,
-      enum: ["queued", "ready", "failed"],
+      enum: ["queued", "processing", "ready", "failed"],
       default: "queued",
     },
 

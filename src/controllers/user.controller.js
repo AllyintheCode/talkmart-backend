@@ -6,6 +6,7 @@ import Otp from "../models/Otp.js";
 import { sendEmailOtp } from "../utils/email.js";
 import { uploadToR2, deleteFromR2 } from "../services/r2Upload.service.js";
 import { compressImage } from "../services/compress.service.js";
+import { invalidateAuthCache } from "../middlewares/auth.middleware.js";
 
 // checkAndHashPassword funksiyası silinib, çünki şifrə yenilənməsi ayrıca API-də (changePassword) edilir.
 
@@ -70,6 +71,10 @@ export const changePassword = async (req, res) => {
       return res.status(400).json({ message: "Bütün sahələri (currentPassword, newPassword, confirmPassword) daxil edin." });
     }
 
+    if (typeof newPassword !== "string" || newPassword.length < 6 || newPassword.length > 128) {
+      return res.status(400).json({ message: "Yeni şifrə 6-128 simvol arasında olmalıdır." });
+    }
+
     if (newPassword !== confirmPassword) {
       return res.status(400).json({ message: "Yeni şifrələr uyğun gəlmir." });
     }
@@ -124,6 +129,27 @@ const handleProfileImageUpload = async (user, file) => {
   const { key, url } = await uploadToR2(compressed.buffer, "talkmart/images", compressed.mimetype, compressed.ext);
   user.profileImage = url;
   user.profileImagePublicId = key;
+};
+
+/**
+ * Body-də gələn profileImage sahəsi.
+ * Təhlükəsizlik: xarici URL qəbul edilmir (fişinq / tracking / uyğunsuz şəkil riski) —
+ * şəkil yalnız fayl kimi yüklənə bilər. Boş dəyər (null / "" / "null") şəkli silir.
+ */
+const applyBodyProfileImage = async (user, value) => {
+  if (value === undefined) return;
+  if (value === null || value === "" || value === "null") {
+    if (user.profileImagePublicId) {
+      try {
+        await deleteFromR2(user.profileImagePublicId);
+      } catch (err) {
+        console.warn("R2 profil şəkli silinərkən xəta:", err.message);
+      }
+    }
+    user.profileImage = null;
+    user.profileImagePublicId = null;
+  }
+  // Digər dəyərlər (URL) nəzərə alınmır
 };
 
 // PUT /api/users/user
@@ -186,8 +212,8 @@ export const updateUser = async (req, res) => {
     // Profil şəkli yenilənməsi
     if (req.file) {
       await handleProfileImageUpload(user, req.file);
-    } else if (req.body.profileImage !== undefined) {
-      user.profileImage = req.body.profileImage;
+    } else {
+      await applyBodyProfileImage(user, req.body.profileImage);
     }
     await user.save();
 
@@ -267,8 +293,8 @@ export const updateUserProfile = async (req, res) => {
     // Profil şəkli yenilənməsi
     if (req.file) {
       await handleProfileImageUpload(user, req.file);
-    } else if (req.body.profileImage !== undefined) {
-      user.profileImage = req.body.profileImage;
+    } else {
+      await applyBodyProfileImage(user, req.body.profileImage);
     }
 
     await user.save();
@@ -360,8 +386,8 @@ export const updateProvider = async (req, res) => {
     // Profil şəkli yenilənməsi (Əgər fayl göndərilibsə və ya JSON-da URL gəlibsə)
     if (req.file) {
       await handleProfileImageUpload(user, req.file);
-    } else if (req.body.profileImage !== undefined) {
-      user.profileImage = req.body.profileImage;
+    } else {
+      await applyBodyProfileImage(user, req.body.profileImage);
     }
 
     await user.save();
@@ -592,6 +618,7 @@ export const deleteAccount = async (req, res) => {
 
     // İstifadəçini sil
     await User.findByIdAndDelete(userId);
+    await invalidateAuthCache(userId);
 
     return res.json({
       success: true,

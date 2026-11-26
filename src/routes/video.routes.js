@@ -17,7 +17,7 @@ import {
 } from "../controllers/engagement.controller.js";
 import { verifyToken, providerOnly, requireAuth, optionalAuth } from "../middlewares/auth.middleware.js";
 import { uploadVideo } from "../middlewares/upload.middleware.js";
-import { engagementLimiter } from "../middlewares/rateLimit.middleware.js";
+import { engagementLimiter, uploadLimiter, limitPendingUploads } from "../middlewares/rateLimit.middleware.js";
 
 const router = Router();
 
@@ -62,7 +62,7 @@ router.post("/:id/save", requireAuth, engagementLimiter, toggleSave);
 // ============================
 
 // POST /api/videos/upload  →  video + description + price
-router.post("/upload", verifyToken, providerOnly, (req, res, next) => {
+router.post("/upload", verifyToken, providerOnly, uploadLimiter, limitPendingUploads, (req, res, next) => {
   uploadVideo.single("video")(req, res, (err) => {
     if (err) {
       if (err.code === "LIMIT_FILE_SIZE") {

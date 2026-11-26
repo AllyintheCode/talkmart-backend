@@ -32,6 +32,9 @@ const UserSchema = new mongoose.Schema(
 
     password: { type: String, required: true },
 
+    // Şifrə sıfırlanma vaxtı — bundan əvvəl verilmiş tokenlər etibarsızdır
+    passwordChangedAt: { type: Date, default: null },
+
     bio: { type: String, trim: true, default: null },
 
     // user-də null, provider-də object

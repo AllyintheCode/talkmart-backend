@@ -5,6 +5,7 @@ import Video from "../models/Video.js";
 import path from "path";
 import { uploadToR2, deleteFromR2 } from "../services/r2Upload.service.js";
 import { compressImage } from "../services/compress.service.js";
+import { invalidateAuthCache } from "../middlewares/auth.middleware.js";
 
 // ============================
 // DASHBOARD STATİSTİKALARI (ADMIN)
@@ -333,6 +334,7 @@ export const blockUser = async (req, res) => {
 
     user.isBlocked = true;
     await user.save();
+    await invalidateAuthCache(user._id); // blok dərhal qüvvəyə minsin
 
     return res.status(200).json({
       success: true,
@@ -362,6 +364,7 @@ export const unblockUser = async (req, res) => {
 
     user.isBlocked = false;
     await user.save();
+    await invalidateAuthCache(user._id);
 
     return res.status(200).json({
       success: true,
@@ -400,6 +403,7 @@ export const deleteUser = async (req, res) => {
     }
 
     await user.deleteOne();
+    await invalidateAuthCache(user._id);
 
     return res.status(200).json({
       success: true,
@@ -580,11 +584,26 @@ export const moderateVideo = async (req, res) => {
     }
 
     if (action === "approve") {
+      // Emal uğursuz olubsa və ya AI rədd etdiyi üçün fayl R2-yə yüklənməyibsə,
+      // təsdiq boş videoUrl ilə aktiv video yaradardı.
+      if (video.processingStatus === "failed") {
+        return res.status(409).json({
+          error: "PROCESSING_FAILED",
+          message: "Video emalı uğursuz olub, fayl mövcud deyil. Provider videonu yenidən yükləməlidir.",
+        });
+      }
+      if (video.processingStatus === "ready" && !video.videoUrl) {
+        return res.status(409).json({
+          error: "VIDEO_FILE_MISSING",
+          message: "Video faylı mövcud deyil (AI tərəfindən rədd edilib). Provider videonu yenidən yükləməlidir.",
+        });
+      }
+
       video.moderationStatus = "approved";
       video.adminFeedback = feedback || "Admin tərəfindən təsdiqləndi.";
       // Yalnız FFMPEG emalı tamamlanıbsa aktiv et.
-      // Əgər hələ işlənməyibsə (queued), processVideoJob bitdikdə
-      // moderationStatus="approved" görüb özü status="active" edəcək.
+      // Əgər hələ işlənir (queued/processing), processVideoJob bitdikdə
+      // moderationStatus="approved" görüb AI nəticəsindən asılı olmayaraq status="active" edəcək.
       if (video.processingStatus === "ready") {
         video.status = "active";
       }

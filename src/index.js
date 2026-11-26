@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import compression from "compression";
-import rateLimit from "express-rate-limit";
+import { identifyForRateLimit, globalLimiter } from "./middlewares/rateLimit.middleware.js";
 import "dotenv/config";
 import { connectDB } from "./config/db.js";
 import "./config/redis.js";
@@ -16,8 +16,19 @@ import swaggerDocument from "./swagger.js";
 
 const app = express();
 
-// Trust proxy ayarÄ± - rate-limit arxasÄ±nda IP-lÉ™ri dÃ¼zgÃ¼n oxumaq Ã¼Ã§Ã¼n
-app.set("trust proxy", 1);
+// Trust proxy — istifadəçinin real IP-sini düzgün oxumaq üçün (rate limit buna əsaslanır).
+// Səhv dəyər: ya hamı eyni IP görünür (hamı birlikdə limitlənir),
+// ya da hücumçu X-Forwarded-For başlığını saxtalaşdırıb IP limitlərini keçir.
+// TRUST_PROXY: "false" (birbaşa internetə açıq), "1" (bir proxy: Nginx və ya Cloudflare),
+//              "2" (Cloudflare → Nginx), "loopback" (yalnız eyni maşındakı Nginx-ə etibar)
+const parseTrustProxy = (v) => {
+  if (v === undefined || v === "") return 1;
+  if (v === "true") return true;
+  if (v === "false") return false;
+  if (/^\d+$/.test(v)) return parseInt(v, 10);
+  return v; // "loopback", IP/subnet siyahısı və s.
+};
+app.set("trust proxy", parseTrustProxy(process.env.TRUST_PROXY));
 
 // âœ… GZIP Compression â€” JSON response-larÄ± ~70% kiÃ§ildir
 app.use(compression());
@@ -50,22 +61,7 @@ app.use(
 );
 
 // âœ… Global Rate Limiter â€” BÃ¼tÃ¼n API-lÉ™ri bot/DDoS hÃ¼cumlarÄ±ndan qoruyur
-const globalLimiter = rateLimit({
-  windowMs: 1 * 60 * 1000, // 1 dÉ™qiqÉ™
-  max: 2000, // Test Ã¼Ã§Ã¼n 200-dÉ™n 2000-É™ qaldÄ±rdÄ±q
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: {
-    success: false,
-    message: "Ã‡ox sorÄŸu gÃ¶ndÉ™rdiniz. Bir az gÃ¶zlÉ™yin.",
-  },
-});
-// app.use("/api", globalLimiter); // GÉ™lÉ™cÉ™kdÉ™ canlÄ± mÃ¼hit Ã¼Ã§Ã¼n mÃ¼tlÉ™q geri qaytarÄ±lmalÄ±dÄ±r!
-
-console.log("JWT", process.env.JWT_SECRET);
-console.log("ENV", process.env);
-
-// CORS â€” Production-da Ã¶z domenini yaz
+// CORS — Production-da öz domenini yaz
 app.use(
   cors({
     origin: process.env.ALLOWED_ORIGINS
@@ -75,6 +71,10 @@ app.use(
     allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
+
+// Global Rate Limiter — login olmuşlar üçün user ID, qonaqlar üçün IP üzrə (CGNAT-a uyğun)
+// Limitlər: GLOBAL_USER_RATE_LIMIT (default 300/dəq), GLOBAL_IP_RATE_LIMIT (default 1200/dəq)
+app.use("/api", identifyForRateLimit, globalLimiter);
 
 app.use(express.json({ limit: "10kb" })); // âœ… JSON body limit â€” memory overflow qorunmasÄ±
 
